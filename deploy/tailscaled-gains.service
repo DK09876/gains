@@ -1,0 +1,20 @@
+[Unit]
+Description=Tailscale node for Gains (separate identity, userspace)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+# --statedir, not --state: the directory is also the var root, and without one
+# tailscaled has nowhere to keep the TLS certificate, so HTTPS fails to
+# handshake with "no TailscaleVarRoot".
+ExecStart=/usr/sbin/tailscaled \
+  --statedir=/var/lib/tailscale-gains \
+  --socket=/run/tailscale-gains.sock \
+  --tun=userspace-networking \
+  --port=0
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

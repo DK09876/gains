@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0f1211;
+  --surface: #171c1a;
+  --surface-hover: #1f2622;
+  --border: #2a332e;
+  --foreground: #e6ede8;
+  --muted: #8c9a92;
+  --accent: #8fdc5a;
+  --on-accent: #0e1a07;
+  --danger: #f07167;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+}
+
+html, body {
+  background: var(--background);
+  color: var(--foreground);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Page gutters that clear the notch in landscape: 1rem, or more where the
+   screen's corners need it. Used by the header, main and footer. */
+.safe-x {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+
+/* On touch screens: no grey flash on tap, no wait for a double-tap zoom, and
+   form fields at 16px - iOS zooms the whole page into anything smaller when
+   it is focused, and does not zoom back out. */
+@media (pointer: coarse) {
+  a, button, [role="button"], label, summary, select { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  input, select, textarea { font-size: max(16px, 1em) !important; }
+}
+
+/* Numbers that line up down a column of sets. */
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* Number inputs without the spinner arrows - the +/- buttons do that job, bigger. */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

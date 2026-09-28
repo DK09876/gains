@@ -1,0 +1,19 @@
+[Unit]
+Description=Gains (Next.js) on the Pi
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=admin
+WorkingDirectory=/home/admin/development/gains
+Environment=NODE_ENV=production
+Environment=GAINS_DB_PATH=/home/admin/development/gains/data/gains.db
+ExecStart=/usr/bin/npx next start -H 127.0.0.1 -p 3002
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
