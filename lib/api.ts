@@ -7,6 +7,7 @@ import type { Exercise, ExerciseFields, Place, Profile, Session, SessionSummary,
 import { getProfile } from './profile';
 import type { ParsedSheet } from './sheet';
 import type { LoggedSet, Suggestion } from './suggest';
+import type { DayPlan } from './week';
 
 const url = (path: string) => {
   const profile = getProfile();
@@ -88,6 +89,13 @@ export const deleteMedia = (exerciseId: string, mediaId: string) =>
 export const importSheet = (csv: string, preview: boolean, place: Place = 'gym') =>
   fetch(url(preview ? 'import?preview=1' : `import?place=${place}`), { method: 'POST', headers: { 'Content-Type': 'text/csv' }, body: csv })
     .then(json<ParsedSheet & { ids?: string[] }>);
+
+// --- the week --------------------------------------------------------------
+
+export const fetchSchedule = () => fetch(url('schedule')).then(json<{ schedule: DayPlan[] }>).then((b) => b.schedule);
+
+export const setDay = (weekday: number, plan: DayPlan) =>
+  send<{ schedule: DayPlan[] }>('schedule', 'PUT', { weekday, plan }).then((b) => b.schedule);
 
 // --- sessions --------------------------------------------------------------
 

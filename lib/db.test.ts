@@ -116,6 +116,26 @@ describe('workouts', () => {
   });
 });
 
+describe('the week', () => {
+  it('plans days with this profile\'s workouts or rest, and forgets a deleted workout', async () => {
+    const { db, workout } = await withLegs();
+    db.addProfile('kevin', 'Kevin');
+    const theirs = db.createWorkout('kevin', 'Push');
+    expect(db.setDay('dk', 1, workout)).toBe(true);
+    expect(db.setDay('dk', 4, 'rest')).toBe(true);
+    expect(db.setDay('dk', 2, theirs)).toBe(false);
+    expect(db.setDay('dk', 7, 'rest')).toBe(false);
+    expect(db.getSchedule('dk')).toEqual([null, workout, null, null, 'rest', null, null]);
+    expect(db.getSchedule('kevin')).toEqual(Array(7).fill(null));
+    db.setDay('dk', 1, 'rest');
+    expect(db.getSchedule('dk')[1]).toBe('rest');
+    db.setDay('dk', 1, workout);
+    db.setDay('dk', 4, null);
+    db.deleteWorkout(workout);
+    expect(db.getSchedule('dk')).toEqual(Array(7).fill(null));
+  });
+});
+
 describe('uploaded files', () => {
   it('are only handed back for removal once no clip uses them', async () => {
     const { db, workout, squat } = await withLegs();

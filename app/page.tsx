@@ -15,6 +15,7 @@ import * as api from '@/lib/api';
 import type { Session, WorkoutSummary } from '@/lib/db';
 import { dayText } from '@/lib/format';
 import { usePlace } from '@/lib/place';
+import { DAY_NAMES, type DayPlan, today } from '@/lib/week';
 
 export default function Today() {
   const [active, setActive] = useState<Session | null>(null);
@@ -22,15 +23,17 @@ export default function Today() {
   const [finished, setFinished] = useState<api.SessionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState<string | null>(null);
+  const [week, setWeek] = useState<DayPlan[]>([]);
   const place = usePlace();
   const workouts = all?.filter((w) => w.place === place) ?? null;
 
   const load = useCallback(() => {
-    Promise.all([api.fetchSessions(), api.fetchWorkouts()])
-      .then(([sessions, found]) => {
+    Promise.all([api.fetchSessions(), api.fetchWorkouts(), api.fetchSchedule()])
+      .then(([sessions, found, schedule]) => {
         setError(null);
         setActive(sessions.active);
         setWorkouts(found);
+        setWeek(schedule);
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Could not reach the server'));
   }, []);
@@ -71,10 +74,33 @@ export default function Today() {
     );
   }
 
+  // The day's workout from Plan's week, if one is set and still exists.
+  const day = today();
+  const plan = week[day] ?? null;
+  const planned = plan && plan !== 'rest' ? all?.find((w) => w.id === plan) : undefined;
+
   return (
     <div>
       <h1 className="text-2xl font-bold">Today&apos;s workout</h1>
-      <p className="mt-1 text-sm text-[var(--muted)]">Pick one to start.</p>
+      {planned ? (
+        <button
+          onClick={() => start(planned.id)}
+          disabled={!!starting}
+          className="mt-4 w-full rounded-2xl bg-[var(--accent)] p-4 text-left text-[var(--on-accent)] disabled:opacity-60"
+        >
+          <span className="block text-sm opacity-80">{DAY_NAMES[day]}</span>
+          <span className="block text-xl font-bold">{planned.name}</span>
+          <span className="mt-1 block text-sm opacity-80">
+            {starting === planned.id ? 'Starting…' : `${planned.exerciseCount} exercise${planned.exerciseCount === 1 ? '' : 's'} · tap to start`}
+          </span>
+        </button>
+      ) : plan === 'rest' ? (
+        <p className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          <span className="block text-sm text-[var(--muted)]">{DAY_NAMES[day]}</span>
+          <span className="block text-xl font-bold">Rest day</span>
+        </p>
+      ) : null}
+      <p className="mt-4 text-sm text-[var(--muted)]">{planned || plan === 'rest' ? 'Or pick another.' : 'Pick one to start.'}</p>
       <PlaceTabs />
       {error && <p role="alert" className="mt-4 text-sm text-[var(--danger)]">{error}</p>}
       {!workouts && !error && <p className="mt-6 text-sm text-[var(--muted)]">Loading…</p>}
