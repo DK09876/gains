@@ -22,6 +22,9 @@ import { dirname, join } from 'path';
 import { Database } from 'node-sqlite3-wasm';
 
 import type { Media, MediaKind } from './media';
+import type { Place } from './places';
+
+export { isPlace, PLACES, type Place } from './places';
 import type { SheetWorkout } from './sheet';
 import type { LoggedSet } from './suggest';
 
@@ -172,11 +175,6 @@ export function createProfile(name: string): Profile {
 }
 
 // --- workouts ------------------------------------------------------------
-
-/** Where a workout is done: Today and Plan show one at a time, as tabs. */
-export const PLACES = ['gym', 'home'] as const;
-export type Place = (typeof PLACES)[number];
-export const isPlace = (x: unknown): x is Place => PLACES.includes(x as Place);
 
 export interface WorkoutSummary {
   id: string;
