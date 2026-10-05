@@ -8,25 +8,31 @@ import { useCallback, useEffect, useState } from 'react';
 
 import CopyWorkout from '@/components/CopyWorkout';
 import ImportSheet from '@/components/ImportSheet';
+import PlaceTabs from '@/components/PlaceTabs';
 import * as api from '@/lib/api';
 import type { WorkoutSummary } from '@/lib/db';
+import { usePlace } from '@/lib/place';
 
 export default function Plan() {
   const router = useRouter();
-  const [workouts, setWorkouts] = useState<WorkoutSummary[] | null>(null);
+  const [all, setWorkouts] = useState<WorkoutSummary[] | null>(null);
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const place = usePlace();
+  const workouts = all?.filter((w) => w.place === place) ?? null;
 
   const load = useCallback(() => {
     api.fetchWorkouts().then(setWorkouts).catch((e) => setError(e.message));
   }, []);
   useEffect(load, [load]);
 
+  // Only this tab's workouts are reordered; the other tab's keep their order after them.
   const move = async (index: number, by: number) => {
-    if (!workouts) return;
+    if (!all || !workouts) return;
     const order = workouts.map((w) => w.id);
     [order[index], order[index + by]] = [order[index + by], order[index]];
-    setWorkouts(order.map((id) => workouts.find((w) => w.id === id)!));
+    const rest = all.filter((w) => !order.includes(w.id));
+    setWorkouts([...order.map((id) => all.find((w) => w.id === id)!), ...rest]);
     try {
       setWorkouts(await api.reorderWorkouts(order));
     } catch (e) {
@@ -39,8 +45,10 @@ export default function Plan() {
     <div>
       <h1 className="text-2xl font-bold">Plan</h1>
       <p className="mt-1 text-sm text-[var(--muted)]">Your workouts, their exercises, targets and clips.</p>
+      <PlaceTabs />
       {error && <p role="alert" className="mt-3 text-sm text-[var(--danger)]">{error}</p>}
 
+      {workouts?.length === 0 && <p className="mt-5 text-sm text-[var(--muted)]">No {place} workouts yet.</p>}
       <ul className="mt-5 flex flex-col gap-2">
         {workouts?.map((w, i) => (
           <li key={w.id} className="flex items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
@@ -60,7 +68,7 @@ export default function Plan() {
           e.preventDefault();
           if (!name.trim()) return;
           try {
-            const id = await api.createWorkout(name.trim());
+            const id = await api.createWorkout(name.trim(), place);
             router.push(`/plan/${id}`);
           } catch (err) {
             setError(err instanceof Error ? err.message : 'Could not create it');
@@ -70,7 +78,7 @@ export default function Plan() {
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="New workout, e.g. Push Day"
+          placeholder={place === 'home' ? 'New home workout' : 'New workout, e.g. Push Day'}
           aria-label="New workout name"
           maxLength={80}
           className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 outline-none focus:border-[var(--accent)]"
@@ -80,12 +88,12 @@ export default function Plan() {
 
       <details className="mt-8 rounded-xl border border-[var(--border)] p-4" open={workouts?.length === 0}>
         <summary className="cursor-pointer font-medium">Import from Google Sheets</summary>
-        <div className="mt-3"><ImportSheet onImported={load} /></div>
+        <div className="mt-3"><ImportSheet place={place} onImported={load} /></div>
       </details>
 
       <details className="mt-3 rounded-xl border border-[var(--border)] p-4">
         <summary className="cursor-pointer font-medium">Copy a friend&apos;s workout</summary>
-        <div className="mt-3"><CopyWorkout onCopied={load} /></div>
+        <div className="mt-3"><CopyWorkout place={place} onCopied={load} /></div>
       </details>
     </div>
   );

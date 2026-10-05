@@ -9,9 +9,10 @@
 import { useState } from 'react';
 
 import * as api from '@/lib/api';
+import type { Place } from '@/lib/db';
 import type { ParsedSheet } from '@/lib/sheet';
 
-export default function ImportSheet({ onImported }: { onImported: () => void }) {
+export default function ImportSheet({ place, onImported }: { place: Place; onImported: () => void }) {
   const [csv, setCsv] = useState('');
   const [preview, setPreview] = useState<ParsedSheet | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +32,7 @@ export default function ImportSheet({ onImported }: { onImported: () => void }) 
   const add = async () => {
     setBusy(true);
     try {
-      await api.importSheet(csv, false);
+      await api.importSheet(csv, false, place);
       setPreview(null);
       setCsv('');
       onImported();

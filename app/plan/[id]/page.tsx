@@ -8,7 +8,8 @@ import { Fragment, useEffect, useState } from 'react';
 
 import ExerciseEditor from '@/components/ExerciseEditor';
 import * as api from '@/lib/api';
-import type { Workout } from '@/lib/db';
+import { PLACES, type Workout } from '@/lib/db';
+import { setPlace } from '@/lib/place';
 
 export default function WorkoutPlan() {
   const { id } = useParams<{ id: string }>();
@@ -32,7 +33,7 @@ export default function WorkoutPlan() {
       : <p className="text-sm text-[var(--muted)]">Loading…</p>;
   }
 
-  const save = async (change: { name?: string; notes?: string }) => {
+  const save = async (change: { name?: string; notes?: string; place?: Workout['place'] }) => {
     setError(null);
     try {
       setWorkout(await api.updateWorkout(workout.id, change));
@@ -75,6 +76,20 @@ export default function WorkoutPlan() {
         rows={notes ? 2 : 1}
         className="mt-1 w-full resize-y rounded-lg border border-transparent bg-transparent px-1 text-sm text-[var(--muted)] outline-none hover:border-[var(--border)] focus:border-[var(--accent)]"
       />
+      <label className="mt-1 flex items-center gap-2 px-1 text-sm text-[var(--muted)]">
+        Done at
+        <select
+          value={workout.place}
+          onChange={(e) => {
+            const place = e.target.value as Workout['place'];
+            setPlace(place);
+            save({ place });
+          }}
+          className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-[var(--foreground)]"
+        >
+          {PLACES.map((p) => <option key={p} value={p}>{p === 'gym' ? 'Gym' : 'Home'}</option>)}
+        </select>
+      </label>
       {error && <p role="alert" className="mt-2 text-sm text-[var(--danger)]">{error}</p>}
 
       <ul className="mt-4 flex flex-col gap-2">

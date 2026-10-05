@@ -3,7 +3,7 @@
  * Every call says which profile it is for; data routes refuse one that does not.
  */
 
-import type { Exercise, ExerciseFields, Profile, Session, SessionSummary, Workout, WorkoutSummary } from './db';
+import type { Exercise, ExerciseFields, Place, Profile, Session, SessionSummary, Workout, WorkoutSummary } from './db';
 import { getProfile } from './profile';
 import type { ParsedSheet } from './sheet';
 import type { LoggedSet, Suggestion } from './suggest';
@@ -43,9 +43,9 @@ export const createProfile = (name: string) =>
 export const fetchWorkouts = (of?: string) =>
   fetch(url(of ? `workouts?of=${encodeURIComponent(of)}` : 'workouts')).then(json<{ workouts: WorkoutSummary[] }>).then((b) => b.workouts);
 
-export const createWorkout = (name: string) => send<{ id: string }>('workouts', 'POST', { name }).then((b) => b.id);
+export const createWorkout = (name: string, place: Place) => send<{ id: string }>('workouts', 'POST', { name, place }).then((b) => b.id);
 
-export const copyWorkout = (copyFrom: string) => send<{ id: string }>('workouts', 'POST', { copyFrom }).then((b) => b.id);
+export const copyWorkout = (copyFrom: string, place: Place) => send<{ id: string }>('workouts', 'POST', { copyFrom, place }).then((b) => b.id);
 
 export const reorderWorkouts = (order: string[]) =>
   send<{ workouts: WorkoutSummary[] }>('workouts', 'PATCH', { order }).then((b) => b.workouts);
@@ -54,7 +54,7 @@ type WithWorkout = { workout: Workout };
 
 export const fetchWorkout = (id: string) => fetch(url(`workouts/${id}`)).then(json<WithWorkout>).then((b) => b.workout);
 
-export const updateWorkout = (id: string, change: { name?: string; notes?: string }) =>
+export const updateWorkout = (id: string, change: { name?: string; notes?: string; place?: Place }) =>
   send<WithWorkout>(`workouts/${id}`, 'PATCH', change).then((b) => b.workout);
 
 export const deleteWorkout = (id: string) => send<{ ok: true }>(`workouts/${id}`, 'DELETE');
@@ -85,8 +85,8 @@ export async function uploadMedia(exerciseId: string, file: File): Promise<Worko
 export const deleteMedia = (exerciseId: string, mediaId: string) =>
   send<WithWorkout>(`exercises/${exerciseId}/media?mediaId=${encodeURIComponent(mediaId)}`, 'DELETE').then((b) => b.workout);
 
-export const importSheet = (csv: string, preview: boolean) =>
-  fetch(url(preview ? 'import?preview=1' : 'import'), { method: 'POST', headers: { 'Content-Type': 'text/csv' }, body: csv })
+export const importSheet = (csv: string, preview: boolean, place: Place = 'gym') =>
+  fetch(url(preview ? 'import?preview=1' : `import?place=${place}`), { method: 'POST', headers: { 'Content-Type': 'text/csv' }, body: csv })
     .then(json<ParsedSheet & { ids?: string[] }>);
 
 // --- sessions --------------------------------------------------------------
