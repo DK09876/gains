@@ -8,7 +8,8 @@ import { Fragment, useEffect, useState } from 'react';
 
 import ExerciseEditor from '@/components/ExerciseEditor';
 import * as api from '@/lib/api';
-import { PLACES, type Workout } from '@/lib/db';
+import type { Workout } from '@/lib/db';
+import { PLACES } from '@/lib/places';
 import { setPlace } from '@/lib/place';
 
 export default function WorkoutPlan() {
