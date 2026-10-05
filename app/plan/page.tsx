@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react';
 import CopyWorkout from '@/components/CopyWorkout';
 import ImportSheet from '@/components/ImportSheet';
 import PlaceTabs from '@/components/PlaceTabs';
+import WeekPlan from '@/components/WeekPlan';
 import * as api from '@/lib/api';
 import type { WorkoutSummary } from '@/lib/db';
 import { usePlace } from '@/lib/place';
@@ -86,7 +87,15 @@ export default function Plan() {
         <button disabled={!name.trim()} className="rounded-lg bg-[var(--accent)] px-4 py-2 font-semibold text-[var(--on-accent)] disabled:opacity-50">Add</button>
       </form>
 
-      <details className="mt-8 rounded-xl border border-[var(--border)] p-4" open={workouts?.length === 0}>
+      {!!all?.length && (
+        <details className="mt-8 rounded-xl border border-[var(--border)] p-4">
+          <summary className="cursor-pointer font-medium">Your week</summary>
+          <p className="mt-1 text-sm text-[var(--muted)]">Today starts with the day&apos;s workout.</p>
+          <div className="mt-3"><WeekPlan workouts={all} /></div>
+        </details>
+      )}
+
+      <details className="mt-3 rounded-xl border border-[var(--border)] p-4" open={workouts?.length === 0}>
         <summary className="cursor-pointer font-medium">Import from Google Sheets</summary>
         <div className="mt-3"><ImportSheet place={place} onImported={load} /></div>
       </details>

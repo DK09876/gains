@@ -57,6 +57,10 @@ apart. A workout is made, imported or copied into whichever tab is open, and
 can be moved with *Done at* on its plan page. The tab you last picked is
 remembered on the device.
 
+**Your week** on Plan sets a workout, or rest, for each day. Today then
+opens with that day's workout, one tap to start, or says it is a rest day;
+any other workout can still be picked under it. The day is the phone's.
+
 **History** lists finished workouts; open one for every set, and any target
 it still suggests raising.
 

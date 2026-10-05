@@ -23,6 +23,7 @@ import { Database } from 'node-sqlite3-wasm';
 
 import type { Media, MediaKind } from './media';
 import type { Place } from './places';
+import type { DayPlan } from './week';
 
 export { isPlace, PLACES, type Place } from './places';
 import type { SheetWorkout } from './sheet';
@@ -56,6 +57,15 @@ function open(): Database {
     db.run(`ALTER TABLE workouts ADD COLUMN place TEXT NOT NULL DEFAULT 'gym'`);
   }
   db.run(`CREATE INDEX IF NOT EXISTS idx_workouts_profile ON workouts (profileId)`);
+  // One row per planned day; a null workout is a rest day, a missing row nothing planned.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS schedule (
+      profileId TEXT NOT NULL,
+      weekday INTEGER NOT NULL,
+      workoutId TEXT,
+      PRIMARY KEY (profileId, weekday)
+    )
+  `);
   db.run(`
     CREATE TABLE IF NOT EXISTS exercises (
       id TEXT PRIMARY KEY,
@@ -275,6 +285,7 @@ export function deleteWorkout(id: string): string[] {
     const exercises = (database.all('SELECT id FROM exercises WHERE workoutId = ?', [id]) as Array<{ id: string }>).map((e) => e.id);
     const files = exercises.flatMap((e) => removeExercise(database, e));
     database.run('UPDATE sessions SET workoutId = NULL WHERE workoutId = ?', [id]);
+    database.run('DELETE FROM schedule WHERE workoutId = ?', [id]);
     database.run('DELETE FROM workouts WHERE id = ?', [id]);
     return orphans(database, files);
   });
@@ -297,6 +308,33 @@ export function copyWorkout(fromId: string, toProfile: string, place?: Place): s
     }
     return id;
   });
+}
+
+// --- the week ------------------------------------------------------------
+
+/** This profile's week, Sunday first: each day's workout, 'rest', or null for nothing planned. */
+export function getSchedule(profileId: string): DayPlan[] {
+  const week: DayPlan[] = Array(7).fill(null);
+  const rows = open().all('SELECT weekday, workoutId FROM schedule WHERE profileId = ?', [profileId]) as Array<{ weekday: number; workoutId: string | null }>;
+  for (const row of rows) week[row.weekday] = row.workoutId ?? 'rest';
+  return week;
+}
+
+/** Plan one day. A workout that is not this profile's is refused. */
+export function setDay(profileId: string, weekday: number, plan: DayPlan): boolean {
+  if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) return false;
+  const database = open();
+  if (plan === null) {
+    database.run('DELETE FROM schedule WHERE profileId = ? AND weekday = ?', [profileId, weekday]);
+    return true;
+  }
+  if (plan !== 'rest' && !database.get('SELECT 1 FROM workouts WHERE id = ? AND profileId = ?', [plan, profileId])) return false;
+  database.run(
+    `INSERT INTO schedule (profileId, weekday, workoutId) VALUES (?, ?, ?)
+     ON CONFLICT (profileId, weekday) DO UPDATE SET workoutId = excluded.workoutId`,
+    [profileId, weekday, plan === 'rest' ? null : plan],
+  );
+  return true;
 }
 
 // --- exercises -----------------------------------------------------------
