@@ -76,6 +76,32 @@ describe('workouts', () => {
     expect(db.getWorkout(workout, 'dk')!.exercises[0].targetWeight).toBe(95);
   });
 
+  it('are at the gym unless made at home, and can move between them', async () => {
+    const db = await load();
+    db.addProfile('dk', 'DK');
+    const gym = db.createWorkout('dk', 'Push');
+    const home = db.createWorkout('dk', 'Bodyweight', '', 'home');
+    expect(db.listWorkouts('dk').map((w) => [w.name, w.place])).toEqual([['Push', 'gym'], ['Bodyweight', 'home']]);
+    db.updateWorkout(gym, { place: 'home' });
+    expect(db.getWorkout(gym, 'dk')!.place).toBe('home');
+    db.addProfile('kevin', 'Kevin');
+    expect(db.getWorkout(db.copyWorkout(home, 'kevin')!, 'kevin')!.place).toBe('home');
+    expect(db.getWorkout(db.copyWorkout(home, 'kevin', 'gym')!, 'kevin')!.place).toBe('gym');
+    expect(db.getWorkout(db.importWorkouts('dk', [{ name: 'Legs', exercises: [] }], 'home')[0], 'dk')!.place).toBe('home');
+  });
+
+  it('made before there were places are at the gym', async () => {
+    const { Database } = await import('node-sqlite3-wasm');
+    const old = new Database(process.env.GAINS_DB_PATH!);
+    old.run(`CREATE TABLE workouts (id TEXT PRIMARY KEY, profileId TEXT NOT NULL, name TEXT NOT NULL, notes TEXT NOT NULL DEFAULT '',
+      position INTEGER NOT NULL, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL)`);
+    old.run(`INSERT INTO workouts VALUES ('w1', 'dk', 'Legs', '', 0, 'x', 'x')`);
+    old.close();
+    const db = await load();
+    db.addProfile('dk', 'DK');
+    expect(db.listWorkouts('dk')).toMatchObject([{ id: 'w1', place: 'gym' }]);
+  });
+
   it('import from a sheet, clips and all', async () => {
     const db = await load();
     db.addProfile('dk', 'DK');

@@ -52,6 +52,11 @@ Legs,,,                          a name in the first column starts a workout
 
 A line that sits under no workout is listed as left out rather than dropped.
 
+**Gym / Home** tabs on Today and Plan keep gym workouts and home workouts
+apart. A workout is made, imported or copied into whichever tab is open, and
+can be moved with *Done at* on its plan page. The tab you last picked is
+remembered on the device.
+
 **History** lists finished workouts; open one for every set, and any target
 it still suggests raising.
 

@@ -48,6 +48,10 @@ function open(): Database {
       updatedAt TEXT NOT NULL
     )
   `);
+  // Added after launch: where a workout is done. Older ones were all at the gym.
+  if (!(db.all('PRAGMA table_info(workouts)') as Array<{ name: string }>).some((c) => c.name === 'place')) {
+    db.run(`ALTER TABLE workouts ADD COLUMN place TEXT NOT NULL DEFAULT 'gym'`);
+  }
   db.run(`CREATE INDEX IF NOT EXISTS idx_workouts_profile ON workouts (profileId)`);
   db.run(`
     CREATE TABLE IF NOT EXISTS exercises (
@@ -169,11 +173,17 @@ export function createProfile(name: string): Profile {
 
 // --- workouts ------------------------------------------------------------
 
+/** Where a workout is done: Today and Plan show one at a time, as tabs. */
+export const PLACES = ['gym', 'home'] as const;
+export type Place = (typeof PLACES)[number];
+export const isPlace = (x: unknown): x is Place => PLACES.includes(x as Place);
+
 export interface WorkoutSummary {
   id: string;
   name: string;
   notes: string;
   position: number;
+  place: Place;
   exerciseCount: number;
   /** When this workout was last finished, if ever. */
   lastDone: string | null;
@@ -200,7 +210,7 @@ export interface Workout extends WorkoutSummary {
 
 export function listWorkouts(profileId: string): WorkoutSummary[] {
   return open().all(`
-    SELECT w.id, w.name, w.notes, w.position,
+    SELECT w.id, w.name, w.notes, w.position, w.place,
            (SELECT COUNT(*) FROM exercises e WHERE e.workoutId = w.id) AS exerciseCount,
            (SELECT MAX(s.finishedAt) FROM sessions s WHERE s.workoutId = w.id) AS lastDone
     FROM workouts w WHERE w.profileId = ?
@@ -231,20 +241,21 @@ export function getWorkout(id: string, profileId: string): Workout | null {
   return { ...summary, profileId, exercises: rows.map((r) => ({ ...r, media: media.get(r.id) ?? [] })) };
 }
 
-export function createWorkout(profileId: string, name: string, notes = ''): string {
+export function createWorkout(profileId: string, name: string, notes = '', place: Place = 'gym'): string {
   const id = randomUUID();
   const { position } = open().get(
     'SELECT COALESCE(MAX(position), -1) + 1 AS position FROM workouts WHERE profileId = ?', [profileId],
   ) as { position: number };
   open().run(
-    'INSERT INTO workouts (id, profileId, name, notes, position, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [id, profileId, name, notes, position, now(), now()],
+    'INSERT INTO workouts (id, profileId, name, notes, place, position, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    [id, profileId, name, notes, place, position, now(), now()],
   );
   return id;
 }
 
-export function updateWorkout(id: string, change: { name?: string; notes?: string }): void {
+export function updateWorkout(id: string, change: { name?: string; notes?: string; place?: Place }): void {
   const database = open();
+  if (change.place !== undefined) database.run('UPDATE workouts SET place = ?, updatedAt = ? WHERE id = ?', [change.place, now(), id]);
   if (change.name !== undefined) database.run('UPDATE workouts SET name = ?, updatedAt = ? WHERE id = ?', [change.name, now(), id]);
   if (change.notes !== undefined) database.run('UPDATE workouts SET notes = ?, updatedAt = ? WHERE id = ?', [change.notes, now(), id]);
 }
@@ -276,12 +287,12 @@ export function deleteWorkout(id: string): string[] {
  * clips. Uploaded clips are shared rather than duplicated on disk; a file is
  * only removed when no clip anywhere uses it.
  */
-export function copyWorkout(fromId: string, toProfile: string): string | null {
+export function copyWorkout(fromId: string, toProfile: string, place?: Place): string | null {
   const source = open().get('SELECT profileId FROM workouts WHERE id = ?', [fromId]) as { profileId: string } | null;
   const workout = source && getWorkout(fromId, source.profileId);
   if (!workout) return null;
   return transaction(() => {
-    const id = createWorkout(toProfile, workout.name, workout.notes);
+    const id = createWorkout(toProfile, workout.name, workout.notes, place ?? workout.place);
     for (const exercise of workout.exercises) {
       const copy = addExercise(id, exercise);
       for (const media of exercise.media) addMedia(copy, media);
@@ -380,9 +391,9 @@ function orphans(database: Database, files: string[]): string[] {
 // --- import --------------------------------------------------------------
 
 /** Add the workouts read from a sheet to this profile, all or none. */
-export function importWorkouts(profileId: string, workouts: SheetWorkout[]): string[] {
+export function importWorkouts(profileId: string, workouts: SheetWorkout[], place: Place = 'gym'): string[] {
   return transaction(() => workouts.map((workout) => {
-    const id = createWorkout(profileId, workout.name);
+    const id = createWorkout(profileId, workout.name, '', place);
     for (const { urls, ...fields } of workout.exercises) {
       const exercise = addExercise(id, fields);
       for (const url of urls) addMedia(exercise, { kind: 'url', url });

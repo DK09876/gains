@@ -8,18 +8,22 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 
+import PlaceTabs from '@/components/PlaceTabs';
 import SessionView from '@/components/SessionView';
 import Summary from '@/components/Summary';
 import * as api from '@/lib/api';
 import type { Session, WorkoutSummary } from '@/lib/db';
 import { dayText } from '@/lib/format';
+import { usePlace } from '@/lib/place';
 
 export default function Today() {
   const [active, setActive] = useState<Session | null>(null);
-  const [workouts, setWorkouts] = useState<WorkoutSummary[] | null>(null);
+  const [all, setWorkouts] = useState<WorkoutSummary[] | null>(null);
   const [finished, setFinished] = useState<api.SessionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState<string | null>(null);
+  const place = usePlace();
+  const workouts = all?.filter((w) => w.place === place) ?? null;
 
   const load = useCallback(() => {
     Promise.all([api.fetchSessions(), api.fetchWorkouts()])
@@ -71,11 +75,12 @@ export default function Today() {
     <div>
       <h1 className="text-2xl font-bold">Today&apos;s workout</h1>
       <p className="mt-1 text-sm text-[var(--muted)]">Pick one to start.</p>
+      <PlaceTabs />
       {error && <p role="alert" className="mt-4 text-sm text-[var(--danger)]">{error}</p>}
       {!workouts && !error && <p className="mt-6 text-sm text-[var(--muted)]">Loading…</p>}
       {workouts?.length === 0 && (
         <div className="mt-6 rounded-xl border border-dashed border-[var(--border)] p-6 text-center">
-          <p>No workouts yet.</p>
+          <p>No {place} workouts yet.</p>
           <Link href="/plan" className="mt-3 inline-block rounded-lg bg-[var(--accent)] px-4 py-2 font-semibold text-[var(--on-accent)]">
             Make one, or import your sheet
           </Link>

@@ -5,10 +5,11 @@
 import { useEffect, useState } from 'react';
 
 import * as api from '@/lib/api';
-import type { Profile, WorkoutSummary } from '@/lib/db';
+import type { Place, Profile, WorkoutSummary } from '@/lib/db';
 import { useProfile } from '@/lib/profile';
 
-export default function CopyWorkout({ onCopied }: { onCopied: () => void }) {
+/** Copies land on the tab you are on, whichever tab they came from. */
+export default function CopyWorkout({ place, onCopied }: { place: Place; onCopied: () => void }) {
   const me = useProfile();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [from, setFrom] = useState('');
@@ -52,7 +53,7 @@ export default function CopyWorkout({ onCopied }: { onCopied: () => void }) {
               <button
                 onClick={async () => {
                   try {
-                    await api.copyWorkout(w.id);
+                    await api.copyWorkout(w.id, place);
                     setCopied((c) => new Set(c).add(w.id));
                     onCopied();
                   } catch (e) {
