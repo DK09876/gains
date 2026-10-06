@@ -53,7 +53,7 @@ export default function Summary({ result }: { result: api.SessionResult }) {
                 {applied.has(s.exerciseId) ? (
                   <span className="text-sm text-[var(--accent)]">Updated ✓</span>
                 ) : (
-                  <button onClick={() => apply(s.exerciseId, s.to)} className="shrink-0 rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-[var(--on-accent)]">
+                  <button onClick={() => apply(s.exerciseId, s.to)} className="shrink-0 rounded-lg bg-[var(--accent)] px-3 py-3 text-sm font-semibold text-[var(--on-accent)]">
                     Set to {formatWeight(s.to)}
                   </button>
                 )}

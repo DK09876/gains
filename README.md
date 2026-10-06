@@ -78,6 +78,22 @@ Open it in Safari (with Tailscale connected), **Share → Add to Home Screen**,
 and it installs as **Gains**: full screen, its own icon. If the Pi cannot be
 reached it shows a page saying so with **Try again**.
 
+Built for one hand at the gym:
+
+- **Lost signal mid-workout loses nothing.** A ticked set that cannot reach
+  the Pi is kept on the phone and sent when the connection is back; a note
+  above *Next* says how many are waiting. *Finish* waits for them, since the
+  suggestions need every set.
+- **The clip takes a quarter of the screen**, so the target, last time and
+  the first set show with it on most phones.
+- **Everything you tap is at least 44pt**, as Apple asks, and the set rows
+  fit a 320px-wide phone.
+
+Checked in Playwright on iPhone SE, iPhone 14 Pro (in Safari, from the home
+screen, and landscape), Pixel 7 and a 320px Android: no sideways scrolling,
+no inputs small enough for iOS to zoom into, video playing in place, and the
+offline page and outbox working.
+
 ## Running it
 
 ```bash

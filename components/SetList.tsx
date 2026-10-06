@@ -70,9 +70,9 @@ export default function SetList({ sessionId, entry, onChange, onError }: Props) 
 
   const save = (index: number, row: Row, delay = 0) => {
     clearTimeout(timers.current.get(index));
-    const run = () => api.logSet(sessionId, entry.id, {
+    const run = () => api.setOutbox().put(sessionId, entry.id, {
       setNumber: index + 1, weight: num(row.weight), reps: num(row.reps), done: row.done,
-    }).catch((e) => onError(e instanceof Error ? e.message : 'Could not save that set'));
+    });
     if (delay) timers.current.set(index, setTimeout(run, delay));
     else void run();
   };
@@ -114,6 +114,8 @@ export default function SetList({ sessionId, entry, onChange, onError }: Props) 
     const index = rows.length - 1;
     if (index < 0) return;
     clearTimeout(timers.current.get(index));
+    // Never sent? Then there is nothing on the server to remove.
+    api.setOutbox().drop(sessionId, entry.id, index + 1);
     if (rows[index].saved) {
       api.deleteSet(sessionId, entry.id, index + 1).catch((e) => onError(e instanceof Error ? e.message : 'Could not remove that set'));
     }
@@ -122,7 +124,7 @@ export default function SetList({ sessionId, entry, onChange, onError }: Props) 
 
   return (
     <div>
-      <div className="grid grid-cols-[1.5rem_1fr_4.5rem_3rem] items-center gap-2 px-1 pb-1 text-xs uppercase tracking-wide text-[var(--muted)]">
+      <div className="grid grid-cols-[1.25rem_1fr_3.75rem_2.75rem] items-center gap-1.5 px-1 pb-1 text-xs uppercase tracking-wide text-[var(--muted)]">
         <span>Set</span>
         <span className="text-center">{UNIT}</span>
         <span className="text-center">Reps</span>
@@ -132,7 +134,7 @@ export default function SetList({ sessionId, entry, onChange, onError }: Props) 
         {rows.map((row, i) => (
           <li
             key={i}
-            className={`grid grid-cols-[1.5rem_1fr_4.5rem_3rem] items-center gap-2 rounded-xl border px-1 py-1.5 ${row.done ? 'border-[var(--accent)]/50 bg-[var(--accent)]/10' : 'border-[var(--border)] bg-[var(--surface)]'}`}
+            className={`grid grid-cols-[1.25rem_1fr_3.75rem_2.75rem] items-center gap-1.5 rounded-xl border px-1 py-1.5 ${row.done ? 'border-[var(--accent)]/50 bg-[var(--accent)]/10' : 'border-[var(--border)] bg-[var(--surface)]'}`}
           >
             <span className="tabular text-center text-sm text-[var(--muted)]">{i + 1}</span>
             <div className="flex items-center gap-1">
@@ -170,9 +172,9 @@ export default function SetList({ sessionId, entry, onChange, onError }: Props) 
         ))}
       </ol>
       <div className="mt-2 flex gap-2 text-sm">
-        <button onClick={addSet} className="rounded-lg px-3 py-2 text-[var(--accent)] hover:bg-[var(--surface)]">+ Add set</button>
+        <button onClick={addSet} className="rounded-lg px-3 py-3 text-[var(--accent)] hover:bg-[var(--surface)]">+ Add set</button>
         {rows.length > 0 && (
-          <button onClick={removeSet} className="rounded-lg px-3 py-2 text-[var(--muted)] hover:bg-[var(--surface)]">Remove last</button>
+          <button onClick={removeSet} className="rounded-lg px-3 py-3 text-[var(--muted)] hover:bg-[var(--surface)]">Remove last</button>
         )}
       </div>
     </div>

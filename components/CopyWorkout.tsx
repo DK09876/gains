@@ -60,7 +60,7 @@ export default function CopyWorkout({ place, onCopied }: { place: Place; onCopie
                     setError(e instanceof Error ? e.message : 'Could not copy');
                   }
                 }}
-                className="shrink-0 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm hover:border-[var(--accent)]"
+                className="shrink-0 rounded-lg border border-[var(--border)] px-4 py-2.5 text-sm hover:border-[var(--accent)]"
               >
                 Copy
               </button>

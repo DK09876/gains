@@ -4,6 +4,7 @@
  */
 
 import type { Exercise, ExerciseFields, Place, Profile, Session, SessionSummary, Workout, WorkoutSummary } from './db';
+import { outbox } from './outbox';
 import { getProfile } from './profile';
 import type { ParsedSheet } from './sheet';
 import type { LoggedSet, Suggestion } from './suggest';
@@ -115,6 +116,9 @@ export const deleteSession = (id: string) => send<{ ok: true }>(`sessions/${id}`
 
 export const logSet = (sessionId: string, entryId: string, set: LoggedSet) =>
   send<{ ok: true }>(`sessions/${sessionId}/sets`, 'PUT', { entryId, ...set });
+
+/** Sets go through the outbox, so a dropped connection mid-workout loses nothing. */
+export const setOutbox = () => outbox((p) => logSet(p.sessionId, p.entryId, p.set));
 
 export const deleteSet = (sessionId: string, entryId: string, setNumber: number) =>
   send<{ ok: true }>(`sessions/${sessionId}/sets?entryId=${encodeURIComponent(entryId)}&setNumber=${setNumber}`, 'DELETE');

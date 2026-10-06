@@ -65,7 +65,7 @@ export default function History() {
             {open === s.id && (
               <div className="border-t border-[var(--border)] px-4 pb-4 pt-2">
                 {detail?.session.id === s.id ? <Summary result={detail} /> : <p className="py-2 text-sm text-[var(--muted)]">Loading…</p>}
-                <button onClick={() => remove(s.id)} className="mt-4 text-sm text-[var(--danger)]">Delete from history</button>
+                <button onClick={() => remove(s.id)} className="mt-2 py-3 text-sm text-[var(--danger)]">Delete from history</button>
               </div>
             )}
           </li>

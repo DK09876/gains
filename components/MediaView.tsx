@@ -15,7 +15,7 @@ export default function MediaView({ media, compact }: { media: Media[]; compact?
   if (!media.length) return null;
   const current = media[Math.min(index, media.length - 1)];
   const view = viewOf(current);
-  const height = compact ? 'max-h-48' : 'max-h-[45vh]';
+  const height = compact ? 'max-h-48' : 'max-h-[26vh]';
 
   return (
     <div>
@@ -27,15 +27,15 @@ export default function MediaView({ media, compact }: { media: Media[]; compact?
             title="Exercise clip"
             allow="autoplay; encrypted-media; picture-in-picture"
             allowFullScreen
-            className={`w-full border-0 ${view.vertical ? `aspect-[9/16] ${compact ? 'max-w-[7rem]' : 'max-w-[15rem]'}` : 'aspect-video'}`}
+            className={`border-0 ${view.vertical ? `aspect-[9/16] w-auto ${compact ? 'h-48' : 'h-[26vh]'}` : `aspect-video w-full ${height}`}`}
           />
         )}
         {view.type === 'image' && (
           // eslint-disable-next-line @next/next/no-img-element -- GIFs from anywhere; next/image would freeze them
-          <img key={view.src} src={view.src} alt="Exercise clip" className={`${height} w-auto object-contain`} />
+          <img key={view.src} src={view.src} alt="Exercise clip" className={`${height} w-auto max-w-full object-contain`} />
         )}
         {view.type === 'video' && (
-          <video key={view.src} src={view.src} autoPlay muted loop playsInline className={`${height} w-auto`} />
+          <video key={view.src} src={view.src} autoPlay muted loop playsInline className={`${height} w-auto max-w-full`} />
         )}
         {view.type === 'link' && (
           <a href={view.href} target="_blank" rel="noreferrer" className="flex w-full items-center justify-center gap-2 py-8 text-sm text-[var(--accent)] underline">
@@ -44,14 +44,14 @@ export default function MediaView({ media, compact }: { media: Media[]; compact?
         )}
       </div>
       {media.length > 1 && (
-        <div className="mt-2 flex items-center justify-center gap-1">
+        <div className="mt-1 flex items-center justify-center">
           {media.map((m, i) => (
             <button
               key={m.id}
               onClick={() => setIndex(i)}
               aria-label={`Clip ${i + 1} of ${media.length}`}
               aria-current={i === index}
-              className="p-1.5"
+              className="flex h-9 w-11 items-center justify-center"
             >
               <span className={`block h-2 w-2 rounded-full ${i === index ? 'bg-[var(--accent)]' : 'bg-[var(--border)]'}`} />
             </button>

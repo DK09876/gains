@@ -18,6 +18,7 @@ import SetList from './SetList';
 import * as api from '@/lib/api';
 import type { Session } from '@/lib/db';
 import { dayText, durationText, setsText, targetText } from '@/lib/format';
+import { usePendingCount } from '@/lib/outbox';
 import type { LoggedSet } from '@/lib/suggest';
 
 interface Props {
@@ -46,6 +47,11 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [, tick] = useState(0);
+  const [box] = useState(() => (typeof window === 'undefined' ? null : api.setOutbox()));
+  const waiting = usePendingCount(box);
+
+  // A set the server refused (the workout was thrown away elsewhere) is reported, not retried.
+  useEffect(() => box?.onRefused(setError), [box]);
 
   useEffect(() => {
     try { localStorage.setItem(positionKey(session.id), String(index)); } catch { /* fine */ }
@@ -81,6 +87,13 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
     const left = total - exercisesDone;
     if (left && !confirm(`${left} exercise${left === 1 ? '' : 's'} not logged. Finish anyway?`)) return;
     setBusy(true);
+    // Every set has to be on the Pi before the workout is closed and its suggestions worked out.
+    await box?.flush();
+    if (box?.count()) {
+      setError('Some sets are still on this phone - finish once you have a connection again.');
+      setBusy(false);
+      return;
+    }
     try {
       const result = await api.finishSession(session.id);
       try { localStorage.removeItem(positionKey(session.id)); } catch { /* fine */ }
@@ -127,13 +140,19 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
         <button
           onClick={() => setShowAll((s) => !s)}
           aria-expanded={showAll}
-          className="shrink-0 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm"
+          className="shrink-0 rounded-lg border border-[var(--border)] px-3 py-2.5 text-sm"
         >
           {showAll ? 'Close' : 'All exercises'}
         </button>
       </div>
 
       {error && <p role="alert" className="mt-3 rounded-lg bg-[var(--danger)]/10 px-3 py-2 text-sm text-[var(--danger)]">{error}</p>}
+
+      {showAll && waiting > 0 && (
+        <p role="status" className="mt-3 rounded-lg bg-amber-400/10 px-3 py-2 text-sm text-amber-300">
+          No connection - {waiting} set{waiting === 1 ? ' is' : 's are'} saved on this phone and will send when you&apos;re back online.
+        </p>
+      )}
 
       {showAll ? (
         <div className="mt-4">
@@ -168,12 +187,12 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
       ) : (
         <article className="mt-4">
           {entry.section && <p className="text-xs uppercase tracking-wide text-[var(--accent)]">{entry.section}</p>}
-          <h1 className="text-2xl font-bold leading-tight">{entry.name}</h1>
-          <p className="mt-1 text-sm text-[var(--muted)]">Exercise {index + 1} of {total}</p>
+          <h1 className="text-xl font-bold leading-tight sm:text-2xl">{entry.name}</h1>
+          <p className="mt-0.5 text-sm text-[var(--muted)]">Exercise {index + 1} of {total}</p>
 
-          {entry.media.length > 0 && <div className="mt-4"><MediaView key={entry.id} media={entry.media} /></div>}
+          {entry.media.length > 0 && <div className="mt-3"><MediaView key={entry.id} media={entry.media} /></div>}
 
-          <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
+          <dl className="mt-1 grid grid-cols-2 gap-2 text-sm">
             <div className="rounded-xl bg-[var(--surface)] px-3 py-2">
               <dt className="text-xs text-[var(--muted)]">Target</dt>
               <dd className="font-medium">{targetText(entry) || 'None set'}</dd>
@@ -185,7 +204,7 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
           </dl>
           {entry.notes && <p className="mt-3 whitespace-pre-wrap text-sm text-[var(--muted)]">{entry.notes}</p>}
 
-          <div className="mt-5">
+          <div className="mt-3">
             <SetList
               key={entry.id}
               sessionId={session.id}
@@ -199,6 +218,11 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
 
       {!showAll && (
         <div className="fixed inset-x-0 bottom-0 z-10 border-t border-[var(--border)] bg-[var(--background)]/95 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
+          {waiting > 0 && (
+            <p role="status" className="safe-x mx-auto mb-2 max-w-3xl text-sm text-amber-300">
+              No connection - {waiting} set{waiting === 1 ? ' is' : 's are'} saved on this phone and will send when you&apos;re back online.
+            </p>
+          )}
           <div className="safe-x mx-auto flex max-w-3xl gap-2">
             <button
               onClick={() => setIndex((i) => i - 1)}

@@ -56,7 +56,7 @@ export default function ProfileSwitcher() {
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[var(--muted)] hover:bg-[var(--surface)] hover:text-[var(--foreground)]"
+        className="flex items-center gap-2 rounded-lg px-2 py-2.5 text-[var(--muted)] hover:bg-[var(--surface)] hover:text-[var(--foreground)]"
       >
         <span aria-hidden className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--accent)] text-[11px] font-semibold text-[var(--on-accent)]">
           {name.charAt(0).toUpperCase()}

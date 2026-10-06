@@ -56,3 +56,10 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Safari draws a select at its own height and ignores padding; on a touch
+   screen give every select, and the folding section headings, room for a finger. */
+@media (pointer: coarse) {
+  select { min-height: 44px; }
+  summary { padding-block: 0.6rem; }
+}
