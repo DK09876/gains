@@ -28,13 +28,14 @@ export default function Today() {
   const workouts = all?.filter((w) => w.place === place) ?? null;
 
   const load = useCallback(() => {
-    Promise.all([api.fetchSessions(), api.fetchWorkouts(), api.fetchSchedule()])
+    // Sets left on this phone by a dropped connection go first, so the workout loads with them.
+    api.setOutbox().flush().catch(() => {}).then(() => Promise.all([api.fetchSessions(), api.fetchWorkouts(), api.fetchSchedule()])
       .then(([sessions, found, schedule]) => {
         setError(null);
         setActive(sessions.active);
         setWorkouts(found);
         setWeek(schedule);
-      })
+      }))
       .catch((e) => setError(e instanceof Error ? e.message : 'Could not reach the server'));
   }, []);
 

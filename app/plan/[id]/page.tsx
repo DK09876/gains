@@ -59,7 +59,7 @@ export default function WorkoutPlan() {
 
   return (
     <div>
-      <Link href="/plan" className="text-sm text-[var(--muted)] hover:text-[var(--foreground)]">← Plan</Link>
+      <Link href="/plan" className="-ml-1 inline-block px-1 py-3 text-sm text-[var(--muted)] hover:text-[var(--foreground)]">← Plan</Link>
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
@@ -149,7 +149,7 @@ export default function WorkoutPlan() {
             setError(e instanceof Error ? e.message : 'Could not delete');
           }
         }}
-        className="mt-10 text-sm text-[var(--danger)]"
+        className="mt-8 py-3 text-sm text-[var(--danger)]"
       >
         Delete this workout
       </button>

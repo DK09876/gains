@@ -20,7 +20,7 @@ export default function PlaceTabs() {
           role="tab"
           aria-selected={current === place}
           onClick={() => setPlace(place)}
-          className={`rounded-lg px-4 py-1.5 text-sm font-medium ${current === place ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'text-[var(--muted)] hover:text-[var(--foreground)]'}`}
+          className={`rounded-lg px-5 py-2.5 text-sm font-medium ${current === place ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'text-[var(--muted)] hover:text-[var(--foreground)]'}`}
         >
           {label}
         </button>

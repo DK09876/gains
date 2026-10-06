@@ -126,13 +126,13 @@ export default function ExerciseEditor({ exercise, sections, open, onToggle, onC
                 {exercise.media.map((m) => {
                   const view = viewOf(m);
                   return (
-                    <li key={m.id} className="rounded-lg border border-[var(--border)] p-2">
+                    <li key={m.id} className="min-w-0 rounded-lg border border-[var(--border)] p-2">
                       <MediaView media={[m]} compact />
                       <div className="mt-2 flex items-center gap-2 text-xs text-[var(--muted)]">
                         <span className="min-w-0 flex-1 truncate">{m.kind === 'upload' ? `Uploaded ${view.type === 'video' ? 'video' : 'image'}` : m.url}</span>
                         <button
                           onClick={() => confirm('Remove this clip?') && run(() => api.deleteMedia(exercise.id, m.id))}
-                          className="shrink-0 rounded px-2 py-1 text-[var(--danger)] hover:bg-[var(--surface-hover)]"
+                          className="shrink-0 rounded px-3 py-3 text-[var(--danger)] hover:bg-[var(--surface-hover)]"
                         >
                           Remove
                         </button>
@@ -182,7 +182,7 @@ export default function ExerciseEditor({ exercise, sections, open, onToggle, onC
 
           <button
             onClick={() => confirm(`Delete ${exercise.name}? Past workouts keep what you logged.`) && run(() => api.deleteExercise(exercise.id))}
-            className="mt-5 text-sm text-[var(--danger)]"
+            className="mt-3 py-3 text-sm text-[var(--danger)]"
           >
             Delete exercise
           </button>
