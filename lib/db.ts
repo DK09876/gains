@@ -909,3 +909,58 @@ export function friendsOf(profileId: string, since: string): Friend[] {
 function wasSentSince(profileId: string, kind: string, key: string, since: string): boolean {
   return !!open().get('SELECT 1 FROM notifications WHERE profileId = ? AND kind = ? AND key = ? AND sentAt >= ?', [profileId, kind, key, since]);
 }
+
+// --- progress ----------------------------------------------------------------
+
+export interface ProgressPoint { date: string; weight: number | null; reps: number | null }
+
+export interface ProgressSeries {
+  exerciseId: string;
+  name: string;
+  kind: Kind;
+  workoutName: string;
+  /** The best set of each finished workout that did it, oldest first. */
+  points: ProgressPoint[];
+}
+
+/**
+ * Every lift and timed exercise in this profile's plan with what was done in
+ * each finished workout: the top set (heaviest, then most reps; longest for a
+ * timed one). For the progress charts.
+ */
+export function progressSeries(profileId: string): ProgressSeries[] {
+  const rows = open().all(`
+    SELECT e.id AS exerciseId, e.name, e.kind, w.name AS workoutName, s.startedAt AS date, se.id AS entryId,
+           l.weight, l.reps
+    FROM exercises e
+    JOIN workouts w ON w.id = e.workoutId
+    JOIN session_exercises se ON se.exerciseId = e.id
+    JOIN sessions s ON s.id = se.sessionId
+    JOIN set_logs l ON l.entryId = se.id AND l.done = 1
+    WHERE w.profileId = ? AND s.finishedAt IS NOT NULL AND e.kind != 'check'
+    ORDER BY w.position, e.position, s.startedAt
+  `, [profileId]) as Array<{ exerciseId: string; name: string; kind: Kind; workoutName: string; date: string; entryId: string; weight: number | null; reps: number | null }>;
+  const series = new Map<string, ProgressSeries & { byEntry: Map<string, ProgressPoint> }>();
+  for (const r of rows) {
+    const s = series.get(r.exerciseId) ?? { exerciseId: r.exerciseId, name: r.name, kind: r.kind, workoutName: r.workoutName, points: [], byEntry: new Map() };
+    series.set(r.exerciseId, s);
+    const best = s.byEntry.get(r.entryId);
+    const better = !best || (r.kind === 'timed'
+      ? (r.reps ?? 0) > (best.reps ?? 0)
+      : (r.weight ?? 0) > (best.weight ?? 0) || ((r.weight ?? 0) === (best.weight ?? 0) && (r.reps ?? 0) > (best.reps ?? 0)));
+    if (better) s.byEntry.set(r.entryId, { date: r.date, weight: r.kind === 'timed' ? null : r.weight, reps: r.reps });
+  }
+  // Two workouts of it on one day are one point: that day's best.
+  const better = (kind: Kind, a: ProgressPoint, b: ProgressPoint) => (kind === 'timed'
+    ? (a.reps ?? 0) > (b.reps ?? 0)
+    : (a.weight ?? 0) > (b.weight ?? 0) || ((a.weight ?? 0) === (b.weight ?? 0) && (a.reps ?? 0) > (b.reps ?? 0)));
+  return [...series.values()].map(({ byEntry, ...s }) => {
+    const byDay = new Map<string, ProgressPoint>();
+    for (const p of byEntry.values()) {
+      const day = p.date.slice(0, 10);
+      const held = byDay.get(day);
+      if (!held || better(s.kind, p, held)) byDay.set(day, p);
+    }
+    return { ...s, points: [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date)) };
+  });
+}

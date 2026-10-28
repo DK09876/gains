@@ -3,7 +3,7 @@
  * Every call says which profile it is for; data routes refuse one that does not.
  */
 
-import type { Exercise, ExerciseFields, Friend, Place, PlanSummary, Profile, ReminderPrefs, Session, SessionSummary, Workout, WorkoutSummary } from './db';
+import type { Exercise, ExerciseFields, Friend, Place, PlanSummary, Profile, ProgressSeries, ReminderPrefs, Session, SessionSummary, Workout, WorkoutSummary } from './db';
 import { outbox } from './outbox';
 import { getProfile } from './profile';
 import type { Progress } from './progress';
@@ -152,3 +152,5 @@ export const fetchFriends = () => fetch(url('friends')).then(json<{ friends: Fri
 export const sendSpot = (to: string) =>
   fetch(url('spot/send'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to }) })
     .then(async (r) => (await r.json()) as { result: string; message: string });
+
+export const fetchProgress = () => fetch(url('progress')).then(json<{ series: ProgressSeries[] }>).then((b) => b.series);

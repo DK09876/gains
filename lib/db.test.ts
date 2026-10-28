@@ -335,6 +335,22 @@ describe('sessions', () => {
     expect(db.getSession(middle, 'dk')!.entries[0].last?.sets[0].weight).toBe(100);
   });
 
+  it('chart each exercise by its top set per workout, oldest first', async () => {
+    const { db, workout, squat } = await withLegs();
+    const raw = new (await import('node-sqlite3-wasm')).Database(process.env.GAINS_DB_PATH!);
+    for (const [day, sets] of [['2026-10-01', [[95, 8], [100, 6]]], ['2026-10-08', [[100, 8], [100, 10]]]] as const) {
+      const id = db.startSession('dk', workout)!;
+      const entry = db.getSession(id, 'dk')!.entries[0].id;
+      sets.forEach(([weight, reps], i) => db.logSet(id, entry, { setNumber: i + 1, weight, reps, done: true }));
+      db.finishSession(id);
+      raw.run('UPDATE sessions SET startedAt = ? WHERE id = ?', [`${day}T10:00:00.000Z`, id]);
+    }
+    raw.close();
+    const [series] = db.progressSeries('dk');
+    expect(series).toMatchObject({ exerciseId: squat, name: 'Squat', workoutName: 'Legs' });
+    expect(series.points.map((p) => [p.date.slice(0, 10), p.weight, p.reps])).toEqual([['2026-10-01', 100, 6], ['2026-10-08', 100, 10]]);
+  });
+
   it('outlive their workout being deleted', async () => {
     const { db, workout } = await withLegs();
     const id = db.startSession('dk', workout)!;

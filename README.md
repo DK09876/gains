@@ -64,6 +64,10 @@ any other workout can still be picked under it. The day is the phone's.
 **History** lists finished workouts; open one for every set, and any target
 it still suggests raising.
 
+**Progress** (on History) charts each lift's top set - or a timed exercise's
+longest hold - in every workout, spaced by date, with the change since the
+first and a table of every workout.
+
 **Profiles** keep people apart, as MTG Tracker's do: each has its own
 workouts and history. A new browser asks who is using it, and anyone can add
 themselves. It is separation, not a login. To start from a friend's plan,
