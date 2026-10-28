@@ -27,7 +27,8 @@ export default function StaleWorkout({ session, onCarryOn, onDiscarded, onFinish
   const [error, setError] = useState<string | null>(null);
   const sets = session.entries.reduce((n, e) => n + e.logged.filter((s) => s.done).length, 0);
   const started = new Date(session.startedAt);
-  const when = `${dayText(session.startedAt).toLowerCase().replace(/^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/, (d) => d[0].toUpperCase() + d.slice(1))} at ${started.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
+  const day = dayText(session.startedAt);
+  const when = `${/^(Today|Yesterday)$/.test(day) ? day.toLowerCase() : day} at ${started.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
 
   const run = async (work: () => Promise<void>) => {
     setBusy(true);
