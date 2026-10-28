@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { Fragment, useEffect, useState } from 'react';
 
+import { useConfirm } from '@/components/Confirm';
 import ExerciseEditor from '@/components/ExerciseEditor';
 import * as api from '@/lib/api';
 import type { Workout } from '@/lib/db';
@@ -21,6 +22,7 @@ export default function WorkoutPlan() {
   const [open, setOpen] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   useEffect(() => {
     api.fetchWorkout(id)
@@ -141,7 +143,7 @@ export default function WorkoutPlan() {
 
       <button
         onClick={async () => {
-          if (!confirm(`Delete ${workout.name}? Past workouts keep what you logged.`)) return;
+          if (!(await confirm({ title: `Delete ${workout.name}?`, body: 'Past workouts keep what you logged.', action: 'Delete workout', danger: true }))) return;
           try {
             await api.deleteWorkout(workout.id);
             router.push('/plan');

@@ -6,6 +6,7 @@
 import type { Exercise, ExerciseFields, Place, Profile, Session, SessionSummary, Workout, WorkoutSummary } from './db';
 import { outbox } from './outbox';
 import { getProfile } from './profile';
+import type { Progress } from './progress';
 import type { ParsedSheet } from './sheet';
 import type { LoggedSet, Suggestion } from './suggest';
 import type { DayPlan } from './week';
@@ -100,7 +101,7 @@ export const setDay = (weekday: number, plan: DayPlan) =>
 
 // --- sessions --------------------------------------------------------------
 
-export type SessionResult = { session: Session; suggestions: Suggestion[] };
+export type SessionResult = { session: Session; suggestions: Suggestion[]; progress: Progress[] };
 
 export const fetchSessions = () =>
   fetch(url('sessions')).then(json<{ active: Session | null; history: SessionSummary[] }>);

@@ -11,7 +11,7 @@
  * access is guarded and a missing choice just means "ask again".
  */
 
-import { useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 
 const KEY = 'gains-profile';
 
@@ -56,4 +56,18 @@ function subscribe(listener: () => void): () => void {
  */
 export function useProfile(): string | null {
   return useSyncExternalStore(subscribe, getProfile, () => null);
+}
+
+/** The current profile's display name - "DK" - once it has been fetched; '' until then. */
+export function useProfileName(): string {
+  const id = useProfile();
+  const [names, setNames] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!id) return;
+    fetch('/api/profiles')
+      .then((r) => r.json())
+      .then((b: { profiles?: Profile[] }) => setNames(Object.fromEntries((b.profiles ?? []).map((p) => [p.id, p.name]))))
+      .catch(() => {});
+  }, [id]);
+  return (id && names[id]) || '';
 }

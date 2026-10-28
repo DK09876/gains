@@ -210,6 +210,8 @@ export interface WorkoutSummary {
   position: number;
   place: Place;
   exerciseCount: number;
+  /** How many of them are checked off rather than lifted - the warm-up, mostly. */
+  checkCount: number;
   /** When this workout was last finished, if ever. */
   lastDone: string | null;
 }
@@ -240,6 +242,7 @@ export function listWorkouts(profileId: string): WorkoutSummary[] {
   return open().all(`
     SELECT w.id, w.name, w.notes, w.position, w.place,
            (SELECT COUNT(*) FROM exercises e WHERE e.workoutId = w.id) AS exerciseCount,
+           (SELECT COUNT(*) FROM exercises e WHERE e.workoutId = w.id AND e.kind = 'check') AS checkCount,
            (SELECT MAX(s.finishedAt) FROM sessions s WHERE s.workoutId = w.id) AS lastDone
     FROM workouts w WHERE w.profileId = ?
     ORDER BY w.position, w.createdAt
@@ -535,19 +538,23 @@ export function activeSession(profileId: string): string | null {
 type SetRow = { entryId: string; setNumber: number; weight: number | null; reps: number | null; done: number };
 const toSet = (r: SetRow): LoggedSet => ({ setNumber: r.setNumber, weight: r.weight, reps: r.reps, done: r.done === 1 });
 
-/** For each exercise, the sets from the latest finished session (other than this one) that did it. */
-function lastTimes(profileId: string, exerciseIds: string[], exceptSession: string): Map<string, { date: string; sets: LoggedSet[] }> {
+/**
+ * For each exercise, the sets from the latest finished session before this
+ * one started that did it - so an old workout in History compares with the
+ * one before it, not with today.
+ */
+function lastTimes(profileId: string, exerciseIds: string[], exceptSession: string, before: string): Map<string, { date: string; sets: LoggedSet[] }> {
   const out = new Map<string, { date: string; sets: LoggedSet[] }>();
   if (!exerciseIds.length) return out;
   const database = open();
   const rows = database.all(`
     SELECT se.exerciseId, se.id AS entryId, s.finishedAt FROM session_exercises se
     JOIN sessions s ON s.id = se.sessionId
-    WHERE s.profileId = ? AND s.finishedAt IS NOT NULL AND s.id != ?
+    WHERE s.profileId = ? AND s.finishedAt IS NOT NULL AND s.id != ? AND s.finishedAt <= ?
       AND se.exerciseId IN (${exerciseIds.map(() => '?').join(',')})
       AND EXISTS (SELECT 1 FROM set_logs l WHERE l.entryId = se.id AND l.done = 1)
     ORDER BY s.finishedAt DESC
-  `, [profileId, exceptSession, ...exerciseIds]) as Array<{ exerciseId: string; entryId: string; finishedAt: string }>;
+  `, [profileId, exceptSession, before, ...exerciseIds]) as Array<{ exerciseId: string; entryId: string; finishedAt: string }>;
   for (const row of rows) {
     if (out.has(row.exerciseId)) continue;
     const sets = (database.all('SELECT * FROM set_logs WHERE entryId = ? AND done = 1 ORDER BY setNumber', [row.entryId]) as unknown as SetRow[]).map(toSet);
@@ -571,7 +578,7 @@ export function getSession(id: string, profileId: string): Session | null {
   ) as unknown as SetRow[];
   const ids = rows.map((r) => r.exerciseId).filter((x): x is string => !!x);
   const media = mediaFor(ids);
-  const last = lastTimes(profileId, ids, id);
+  const last = lastTimes(profileId, ids, id, session.startedAt);
   return {
     ...session,
     entries: rows.map((r) => ({
@@ -645,6 +652,25 @@ export function listSessions(profileId: string, limit = 100): SessionSummary[] {
     FROM sessions s WHERE s.profileId = ? AND s.finishedAt IS NOT NULL
     ORDER BY s.startedAt DESC LIMIT ?
   `, [profileId, limit]) as unknown as SessionSummary[];
+}
+
+/**
+ * Per exercise, the most ever done before `before`: heaviest weight for a
+ * lift, longest hold in seconds for a timed exercise. For spotting new bests.
+ */
+export function bestsBefore(profileId: string, exercises: Array<{ id: string; kind: Kind }>, before: string): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const { id, kind } of exercises) {
+    if (kind === 'check') continue;
+    const row = open().get(
+      `SELECT MAX(${kind === 'timed' ? 'l.reps' : 'l.weight'}) AS best FROM set_logs l
+       JOIN session_exercises se ON se.id = l.entryId JOIN sessions s ON s.id = se.sessionId
+       WHERE s.profileId = ? AND se.exerciseId = ? AND l.done = 1 AND s.finishedAt IS NOT NULL AND s.finishedAt <= ?`,
+      [profileId, id, before],
+    ) as { best: number | null };
+    if (row.best !== null) out.set(id, row.best);
+  }
+  return out;
 }
 
 /** Current targets of these exercises; a deleted one is simply absent. */

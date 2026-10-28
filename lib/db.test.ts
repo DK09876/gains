@@ -291,6 +291,26 @@ describe('sessions', () => {
     expect(db.activeSession('dk')).toBe(fresh);
   });
 
+  it('know the best ever done before them, and compare History with the workout before', async () => {
+    const { db, workout, squat } = await withLegs();
+    const raw = new (await import('node-sqlite3-wasm')).Database(process.env.GAINS_DB_PATH!);
+    const done = (weight: number, day: string) => {
+      const id = db.startSession('dk', workout)!;
+      db.logSet(id, db.getSession(id, 'dk')!.entries[0].id, { setNumber: 1, weight, reps: 8, done: true });
+      db.finishSession(id);
+      raw.run('UPDATE sessions SET startedAt = ?, finishedAt = ? WHERE id = ?', [`${day}T10:00:00.000Z`, `${day}T11:00:00.000Z`, id]);
+      return id;
+    };
+    done(100, '2026-10-01');
+    const middle = done(90, '2026-10-08');
+    done(110, '2026-10-15');
+    raw.close();
+    expect(db.bestsBefore('dk', [{ id: squat, kind: 'lift' }], '2026-10-08T10:00:00.000Z').get(squat)).toBe(100);
+    expect(db.bestsBefore('dk', [{ id: squat, kind: 'lift' }], '2026-10-20T00:00:00.000Z').get(squat)).toBe(110);
+    // The middle workout's "last time" is the one before it, not the newest.
+    expect(db.getSession(middle, 'dk')!.entries[0].last?.sets[0].weight).toBe(100);
+  });
+
   it('outlive their workout being deleted', async () => {
     const { db, workout } = await withLegs();
     const id = db.startSession('dk', workout)!;

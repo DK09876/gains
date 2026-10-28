@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import Link from 'next/link';
 
+import { ConfirmProvider } from '@/components/Confirm';
 import Nav from '@/components/Nav';
 import ProfileGate from '@/components/ProfileGate';
 import ProfileSwitcher from '@/components/ProfileSwitcher';
@@ -44,7 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </nav>
         </header>
         <main className="safe-x mx-auto max-w-3xl pb-[max(2rem,env(safe-area-inset-bottom))] pt-5">
-          <ProfileGate>{children}</ProfileGate>
+          <ConfirmProvider><ProfileGate>{children}</ProfileGate></ConfirmProvider>
         </main>
         <ServiceWorker />
       </body>

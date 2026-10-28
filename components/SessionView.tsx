@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import CheckList from './CheckList';
+import { useConfirm } from './Confirm';
 import MediaView from './MediaView';
 import RestTimer, { type Rest } from './RestTimer';
 import SetList from './SetList';
@@ -25,6 +26,7 @@ import type { Session, SessionEntry } from '@/lib/db';
 import { dayText, durationText, setsText, targetText } from '@/lib/format';
 import { DEFAULT_REST } from '@/lib/kinds';
 import { usePendingCount } from '@/lib/outbox';
+import { useProfileName } from '@/lib/profile';
 import { pageName, pagesOf, type Page } from '@/lib/pages';
 import type { LoggedSet } from '@/lib/suggest';
 
@@ -70,9 +72,21 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
   const [, tick] = useState(0);
   const [box] = useState(() => (typeof window === 'undefined' ? null : api.setOutbox()));
   const waiting = usePendingCount(box);
+  const confirm = useConfirm();
+  const profileName = useProfileName();
+  // Bumped when the sets are reloaded from the Pi, so the lists start again from what is saved.
+  const [version, setVersion] = useState(0);
+  // The workout no longer exists on the Pi - finished or thrown away on another phone.
+  const [gone, setGone] = useState(false);
 
-  // A set the server refused (the workout was thrown away elsewhere) is reported, not retried.
-  useEffect(() => box?.onRefused(setError), [box]);
+  // A set the Pi refused is reported, and the screen goes back to what was really saved
+  // rather than showing a tick that isn't there.
+  useEffect(() => box?.onRefused((message) => {
+    setError(`That set wasn't saved: ${message}`);
+    api.fetchSession(session.id)
+      .then((r) => { setEntries(r.session.entries); setVersion((v) => v + 1); })
+      .catch(() => setGone(true));
+  }), [box, session.id]);
 
   useEffect(() => {
     try { localStorage.setItem(positionKey(session.id), String(index)); } catch { /* fine */ }
@@ -136,7 +150,18 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
   const liftsLeft = entries.filter((e) => e.kind !== 'check' && !isDone(e)).length;
 
   const finish = async () => {
-    if (liftsLeft && !confirm(`${liftsLeft} exercise${liftsLeft === 1 ? '' : 's'} not logged. Finish anyway?`)) return;
+    if (!entries.some(isDone)) {
+      // Nothing to keep: finishing would only put an empty workout in History.
+      const away = await confirm({ title: 'Nothing logged yet', body: 'Throw this workout away instead of saving an empty one?', action: 'Throw it away', cancel: 'Keep going', danger: true });
+      if (away) await discard(true);
+      return;
+    }
+    if (liftsLeft && !(await confirm({
+      title: `${liftsLeft} exercise${liftsLeft === 1 ? '' : 's'} not logged`,
+      body: 'They will show as skipped.',
+      action: 'Finish anyway',
+      cancel: 'Keep going',
+    }))) return;
     setBusy(true);
     // Every set has to be on the Pi before the workout is closed and its suggestions worked out.
     await box?.flush();
@@ -155,8 +180,8 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
     }
   };
 
-  const discard = async () => {
-    if (!confirm('Throw this workout away? Nothing from it will be kept.')) return;
+  const discard = async (sure = false) => {
+    if (!sure && !(await confirm({ title: 'Throw this workout away?', body: 'Nothing from it will be kept.', action: 'Throw it away', danger: true }))) return;
     setBusy(true);
     try {
       await api.deleteSession(session.id);
@@ -167,12 +192,22 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
     }
   };
 
+  if (gone) {
+    return (
+      <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
+        <h1 className="text-lg font-bold">This workout was closed somewhere else</h1>
+        <p className="mt-1 text-[var(--muted)]">It was finished or thrown away on another phone, so the last tick wasn&apos;t saved.</p>
+        <button onClick={onDiscarded} className="mt-4 w-full rounded-xl bg-[var(--accent)] py-3 font-bold text-[var(--on-accent)]">Back to Today</button>
+      </div>
+    );
+  }
+
   if (!total) {
     return (
       <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
         <h1 className="text-lg font-semibold">{session.workoutName} has no exercises</h1>
         <p className="mt-1 text-sm text-[var(--muted)]">Add some on the Plan tab, then start it again.</p>
-        <button onClick={discard} className="mt-4 rounded-lg border border-[var(--border)] px-4 py-2 text-sm">Close it</button>
+        <button onClick={() => discard()} className="mt-4 rounded-lg border border-[var(--border)] px-4 py-2 text-sm">Close it</button>
       </div>
     );
   }
@@ -186,7 +221,7 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm text-[var(--muted)]">
-            {session.workoutName} · {durationText(session.startedAt, null)} · {exercisesDone}/{total} done
+            {profileName ? `${profileName} · ` : ''}{session.workoutName} · {durationText(session.startedAt, null)} · {exercisesDone}/{total} done
           </p>
           <div className="mt-2 h-1 overflow-hidden rounded-full bg-[var(--surface)]">
             <div className="h-full bg-[var(--accent)] transition-all" style={{ width: `${(exercisesDone / total) * 100}%` }} />
@@ -237,12 +272,12 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
           </ol>
           <div className="mt-6 flex flex-wrap gap-2">
             <button onClick={finish} disabled={busy} className="rounded-xl bg-[var(--accent)] px-5 py-3 font-semibold text-[var(--on-accent)] disabled:opacity-50">Finish workout</button>
-            <button onClick={discard} disabled={busy} className="rounded-xl px-4 py-3 text-sm text-[var(--danger)] disabled:opacity-50">Discard</button>
+            <button onClick={() => discard()} disabled={busy} className="rounded-xl px-4 py-3 text-sm text-[var(--danger)] disabled:opacity-50">Discard</button>
           </div>
         </div>
       ) : page.checklist ? (
         <article className="mt-4">
-          <CheckList sessionId={session.id} entries={page.entries} onChange={updateEntry} />
+          <CheckList key={version} sessionId={session.id} entries={page.entries} onChange={updateEntry} />
         </article>
       ) : (
         <article className="mt-4">
@@ -267,7 +302,7 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
           <div className="mt-3">
             {entry.kind === 'timed' ? (
               <TimedList
-                key={entry.id}
+                key={`${entry.id}-${version}`}
                 sessionId={session.id}
                 entry={entry}
                 onChange={(logged) => updateEntry(entry.id, logged)}
@@ -275,7 +310,7 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
               />
             ) : (
               <SetList
-                key={entry.id}
+                key={`${entry.id}-${version}`}
                 sessionId={session.id}
                 entry={entry}
                 onError={setError}

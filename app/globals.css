@@ -10,6 +10,8 @@
   --accent: #8fdc5a;
   --on-accent: #0e1a07;
   --danger: #f07167;
+  /* Spot's plate red: new bests, and Spot himself. */
+  --best: #e0604a;
 }
 
 @theme inline {

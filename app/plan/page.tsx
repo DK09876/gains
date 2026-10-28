@@ -11,19 +11,25 @@ import ImportSheet from '@/components/ImportSheet';
 import PlaceTabs from '@/components/PlaceTabs';
 import WeekPlan from '@/components/WeekPlan';
 import * as api from '@/lib/api';
-import type { WorkoutSummary } from '@/lib/db';
+import type { SessionSummary, WorkoutSummary } from '@/lib/db';
 import { usePlace } from '@/lib/place';
+import { DAY_NAMES, WEEK_ORDER, type DayPlan } from '@/lib/week';
 
 export default function Plan() {
   const router = useRouter();
   const [all, setWorkouts] = useState<WorkoutSummary[] | null>(null);
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [schedule, setSchedule] = useState<DayPlan[]>(Array(7).fill(null));
+  const [history, setHistory] = useState<SessionSummary[]>([]);
   const place = usePlace();
+  const showPlaces = !!all?.some((w) => w.place === 'home') || place === 'home';
   const workouts = all?.filter((w) => w.place === place) ?? null;
 
   const load = useCallback(() => {
-    api.fetchWorkouts().then(setWorkouts).catch((e) => setError(e.message));
+    Promise.all([api.fetchWorkouts(), api.fetchSchedule(), api.fetchSessions()])
+      .then(([found, week, sessions]) => { setWorkouts(found); setSchedule(week); setHistory(sessions.history); })
+      .catch((e) => setError(e.message));
   }, []);
   useEffect(load, [load]);
 
@@ -45,18 +51,24 @@ export default function Plan() {
   return (
     <div>
       <h1 className="text-2xl font-bold">Plan</h1>
-      <p className="mt-1 text-sm text-[var(--muted)]">Your workouts, their exercises, targets and clips.</p>
-      <PlaceTabs />
+      {!!all?.length && (
+        <div className="mt-4"><WeekPlan workouts={all} schedule={schedule} history={history} onChange={setSchedule} /></div>
+      )}
+      <h2 className="mt-6 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Workouts</h2>
+      {showPlaces && <PlaceTabs />}
       {error && <p role="alert" className="mt-3 text-sm text-[var(--danger)]">{error}</p>}
 
       {workouts?.length === 0 && <p className="mt-5 text-sm text-[var(--muted)]">No {place} workouts yet.</p>}
-      <ul className="mt-5 flex flex-col gap-2">
+      <ul className="mt-2 flex flex-col gap-2">
         {workouts?.map((w, i) => (
           <li key={w.id} className="flex items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
             <Link href={`/plan/${w.id}`} className="min-w-0 flex-1 px-4 py-3">
               <span className="block truncate font-semibold">{w.name}</span>
-              <span className="block text-sm text-[var(--muted)]">{w.exerciseCount} exercise{w.exerciseCount === 1 ? '' : 's'}</span>
+              <span className="block text-sm text-[var(--muted)]">
+                {[w.checkCount ? `${w.checkCount} warm-up${w.checkCount === 1 ? '' : 's'}` : '', `${w.exerciseCount - w.checkCount} exercise${w.exerciseCount - w.checkCount === 1 ? '' : 's'}`].filter(Boolean).join(' · ')}
+              </span>
             </Link>
+            <span className="shrink-0 rounded-md bg-[var(--surface-hover)] px-2 py-1 text-xs text-[var(--muted)]">{daysOf(w.id, schedule) || 'not planned'}</span>
             <button onClick={() => move(i, -1)} disabled={i === 0} aria-label={`Move ${w.name} up`} className="p-3 text-[var(--muted)] disabled:opacity-20">↑</button>
             <button onClick={() => move(i, 1)} disabled={i === workouts.length - 1} aria-label={`Move ${w.name} down`} className="p-3 pr-4 text-[var(--muted)] disabled:opacity-20">↓</button>
           </li>
@@ -87,15 +99,7 @@ export default function Plan() {
         <button disabled={!name.trim()} className="rounded-lg bg-[var(--accent)] px-4 py-2 font-semibold text-[var(--on-accent)] disabled:opacity-50">Add</button>
       </form>
 
-      {!!all?.length && (
-        <details className="mt-8 rounded-xl border border-[var(--border)] p-4">
-          <summary className="cursor-pointer font-medium">Your week</summary>
-          <p className="mt-1 text-sm text-[var(--muted)]">Today starts with the day&apos;s workout.</p>
-          <div className="mt-3"><WeekPlan workouts={all} /></div>
-        </details>
-      )}
-
-      <details className="mt-3 rounded-xl border border-[var(--border)] p-4" open={workouts?.length === 0}>
+      <details className="mt-8 rounded-xl border border-[var(--border)] p-4" open={workouts?.length === 0}>
         <summary className="cursor-pointer font-medium">Import from Google Sheets</summary>
         <div className="mt-3"><ImportSheet place={place} onImported={load} /></div>
       </details>
@@ -106,4 +110,9 @@ export default function Plan() {
       </details>
     </div>
   );
+}
+
+/** "Mon · Fri": the days this workout is planned for. */
+function daysOf(id: string, schedule: DayPlan[]): string {
+  return WEEK_ORDER.filter((d) => schedule[d] === id).map((d) => DAY_NAMES[d].slice(0, 3)).join(' · ');
 }
