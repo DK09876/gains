@@ -19,7 +19,7 @@ describe('Spot', () => {
   });
 
   it('never leaves a placeholder unfilled in any line', () => {
-    const vars = { workout: 'Pull', friend: 'Kevin', sender: 'DK', n: 2, done: 2, planned: 4, next: 'Legs on Friday', days: 3, first: 'Legs' };
+    const vars = { workout: 'Pull', friend: 'Kevin', sender: 'DK', mascot: 'Gronk', n: 2, done: 2, planned: 4, next: 'Legs on Friday', days: 3, first: 'Legs' };
     for (const moment of ['day', 'comeback', 'rest', 'doneToday', 'monday', 'open', 'friend', 'best', 'finish', 'sent', 'restUp'] as const) {
       for (const tone of ['hype', 'coach', 'drill'] as const) {
         for (let seed = 0; seed < 6; seed++) expect(pickLine(moment, tone, vars, [], seed).text).not.toMatch(/\{\w+\}/);

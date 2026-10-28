@@ -22,6 +22,7 @@ import { dirname, join } from 'path';
 import { Database } from 'node-sqlite3-wasm';
 
 import { guessKind, type Kind } from './kinds';
+import type { Drawing } from './mascot';
 import type { Media, MediaKind } from './media';
 import type { Place } from './places';
 import type { DayPlan } from './week';
@@ -171,6 +172,35 @@ function open(): Database {
     )
   `);
   db.run(`CREATE INDEX IF NOT EXISTS idx_notifications_profile ON notifications (profileId, sentAt)`);
+  // Mascots people drew and shared, for anyone to pick.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS mascot_presets (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL,
+      body TEXT NOT NULL,
+      happy TEXT NOT NULL,
+      coach TEXT NOT NULL,
+      stern TEXT NOT NULL,
+      cheer TEXT NOT NULL,
+      createdBy TEXT NOT NULL,
+      createdAt TEXT NOT NULL
+    )
+  `);
+  // A profile's own mascot, drawn from a description; none means Spot.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS mascots (
+      profileId TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL,
+      body TEXT NOT NULL,
+      happy TEXT NOT NULL,
+      coach TEXT NOT NULL,
+      stern TEXT NOT NULL,
+      cheer TEXT NOT NULL,
+      createdAt TEXT NOT NULL
+    )
+  `);
   const entryColumns = db.all('PRAGMA table_info(session_exercises)') as Array<{ name: string }>;
   if (!entryColumns.some((c) => c.name === 'kind')) {
     db.run(`ALTER TABLE session_exercises ADD COLUMN kind TEXT NOT NULL DEFAULT 'lift'`);
@@ -895,7 +925,7 @@ export function openWorkout(profileId: string): { id: string; workoutName: strin
   return row ?? null;
 }
 
-export interface Friend { id: string; name: string; lastTrained: string | null; sentToday: boolean }
+export interface Friend { id: string; name: string; lastTrained: string | null; sentToday: boolean; mascotName: string }
 
 /** Everyone else, with when they last trained and whether you already sent Spot today. */
 export function friendsOf(profileId: string, since: string): Friend[] {
@@ -903,6 +933,7 @@ export function friendsOf(profileId: string, since: string): Friend[] {
     ...p,
     lastTrained: trainingDates(p.id).lastTrained,
     sentToday: wasSentSince(p.id, 'sent', profileId, since),
+    mascotName: mascotName(p.id),
   }));
 }
 
@@ -963,4 +994,61 @@ export function progressSeries(profileId: string): ProgressSeries[] {
     }
     return { ...s, points: [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date)) };
   });
+}
+
+// --- mascots -----------------------------------------------------------------
+
+export type Mascot = Drawing & { description: string };
+
+/** This profile's own mascot, or null for Spot. */
+export function getMascot(profileId: string): Mascot | null {
+  const row = open().get('SELECT * FROM mascots WHERE profileId = ?', [profileId]) as Record<string, string> | null;
+  if (!row) return null;
+  return { name: row.name, description: row.description, body: row.body, faces: { happy: row.happy, coach: row.coach, stern: row.stern, cheer: row.cheer } };
+}
+
+/** Save a drawing that has already been cleaned. */
+export function setMascot(profileId: string, mascot: Mascot): void {
+  open().run(
+    `INSERT INTO mascots (profileId, name, description, body, happy, coach, stern, cheer, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(profileId) DO UPDATE SET name = excluded.name, description = excluded.description, body = excluded.body,
+       happy = excluded.happy, coach = excluded.coach, stern = excluded.stern, cheer = excluded.cheer, createdAt = excluded.createdAt`,
+    [profileId, mascot.name, mascot.description, mascot.body, mascot.faces.happy, mascot.faces.coach, mascot.faces.stern, mascot.faces.cheer, now()],
+  );
+}
+
+export function clearMascot(profileId: string): void {
+  open().run('DELETE FROM mascots WHERE profileId = ?', [profileId]);
+}
+
+/** What this profile's mascot is called: its own, or Spot. */
+export const mascotName = (profileId: string) => getMascot(profileId)?.name ?? 'Spot';
+
+export interface SharedMascot extends Mascot { id: string; createdBy: string; createdByName: string }
+
+/** Mascots people drew and shared, newest first. */
+export function sharedMascots(): SharedMascot[] {
+  const names = new Map(listProfiles().map((p) => [p.id, p.name]));
+  return (open().all('SELECT * FROM mascot_presets ORDER BY createdAt DESC') as Array<Record<string, string>>).map((r) => ({
+    id: r.id, name: r.name, description: r.description, body: r.body,
+    faces: { happy: r.happy, coach: r.coach, stern: r.stern, cheer: r.cheer },
+    createdBy: r.createdBy, createdByName: names.get(r.createdBy) ?? 'someone',
+  }));
+}
+
+export function shareMascot(profileId: string, mascot: Mascot): string {
+  const id = randomUUID();
+  open().run(
+    'INSERT INTO mascot_presets (id, name, description, body, happy, coach, stern, cheer, createdBy, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [id, mascot.name, mascot.description, mascot.body, mascot.faces.happy, mascot.faces.coach, mascot.faces.stern, mascot.faces.cheer, profileId, now()],
+  );
+  return id;
+}
+
+/** Take a shared mascot out of the gallery - only its creator can. People already using it keep their copy. */
+export function unshareMascot(profileId: string, id: string): boolean {
+  const row = open().get('SELECT createdBy FROM mascot_presets WHERE id = ?', [id]) as { createdBy: string } | null;
+  if (row?.createdBy !== profileId) return false;
+  open().run('DELETE FROM mascot_presets WHERE id = ?', [id]);
+  return true;
 }

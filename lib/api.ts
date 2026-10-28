@@ -3,10 +3,11 @@
  * Every call says which profile it is for; data routes refuse one that does not.
  */
 
-import type { Exercise, ExerciseFields, Friend, Place, PlanSummary, Profile, ProgressSeries, ReminderPrefs, Session, SessionSummary, Workout, WorkoutSummary } from './db';
+import type { Exercise, ExerciseFields, Friend, Mascot, Place, PlanSummary, SharedMascot, Profile, ProgressSeries, ReminderPrefs, Session, SessionSummary, Workout, WorkoutSummary } from './db';
 import { outbox } from './outbox';
 import { getProfile } from './profile';
 import type { Progress } from './progress';
+import type { Drawing } from './mascot';
 import type { ParsedSheet } from './sheet';
 import type { LoggedSet, Suggestion } from './suggest';
 import type { DayPlan } from './week';
@@ -154,3 +155,22 @@ export const sendSpot = (to: string) =>
     .then(async (r) => (await r.json()) as { result: string; message: string });
 
 export const fetchProgress = () => fetch(url('progress')).then(json<{ series: ProgressSeries[] }>).then((b) => b.series);
+
+// --- your mascot ---------------------------------------------------------------
+
+export const fetchMascot = () => fetch(url('mascot')).then(json<{ mascot: Mascot | null; canDraw: boolean }>);
+
+export const drawMascot = (description: string) => send<{ drawing: Drawing; left: number }>('mascot/draw', 'POST', { description });
+
+export const saveMascot = (drawing: Drawing, description: string) =>
+  send<{ mascot: Mascot }>('mascot', 'PUT', { ...drawing, description }).then((b) => b.mascot);
+
+export const resetMascot = () => send<{ mascot: null }>('mascot', 'DELETE');
+
+export interface Preset { id: string; name: string; description: string; body: string; faces: Drawing['faces'] }
+
+export const fetchPresets = () => fetch(url('mascot/presets')).then(json<{ builtIn: Preset[]; shared: SharedMascot[] }>);
+
+export const sharePreset = (drawing: Drawing, description: string) => send<{ id: string }>('mascot/presets', 'POST', { ...drawing, description });
+
+export const unsharePreset = (id: string) => send<{ ok: true }>(`mascot/presets?id=${encodeURIComponent(id)}`, 'DELETE');

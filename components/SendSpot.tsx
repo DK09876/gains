@@ -46,7 +46,7 @@ export default function SendSpot() {
             {said[f.id] && <span className="block text-[var(--muted)]">{said[f.id]}</span>}
           </p>
           {!said[f.id] && !f.sentToday && (
-            <button onClick={() => send(f.id)} className="shrink-0 rounded-xl border border-[var(--best)] px-3 py-2.5 text-sm font-bold text-[var(--best)]">Send Spot</button>
+            <button onClick={() => send(f.id)} className="shrink-0 rounded-xl border border-[var(--best)] px-3 py-2.5 text-sm font-bold text-[var(--best)]">Send {f.mascotName}</button>
           )}
           {f.sentToday && !said[f.id] && <span className="shrink-0 text-xs text-[var(--muted)]">Sent today</span>}
         </div>

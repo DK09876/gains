@@ -82,7 +82,7 @@ export default function ProfileSwitcher() {
             </button>
           ))}
           <div className="mt-1 border-t border-[var(--border)] pt-1">
-            <Link href="/reminders" onClick={() => setOpen(false)} role="menuitem" className="block px-3 py-3 text-sm hover:bg-[var(--surface-hover)]">Spot &amp; reminders</Link>
+            <Link href="/reminders" onClick={() => setOpen(false)} role="menuitem" className="block px-3 py-3 text-sm hover:bg-[var(--surface-hover)]">Mascot &amp; reminders</Link>
             <AddProfile compact onAdded={(p) => switchTo(p.id)} />
           </div>
         </div>
