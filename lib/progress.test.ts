@@ -35,3 +35,13 @@ describe('progressOf', () => {
     ], new Map())).toEqual([]);
   });
 });
+
+describe('chart ticks', async () => {
+  const { niceTicks } = await import('../components/ProgressChart');
+  it('are round numbers covering the data', () => {
+    expect(niceTicks(25, 40)).toEqual([25, 30, 35, 40]);
+    expect(niceTicks(95, 115)).toEqual([95, 100, 105, 110, 115]);
+    expect(niceTicks(30, 30)).toEqual([25, 27.5, 30, 32.5, 35]);
+    expect(niceTicks(0, 1)[0]).toBe(0);
+  });
+});

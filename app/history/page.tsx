@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react';
 
 import { useConfirm } from '@/components/Confirm';
+import ProgressList from '@/components/ProgressList';
 import Summary from '@/components/Summary';
 import * as api from '@/lib/api';
 import type { SessionSummary } from '@/lib/db';
@@ -19,6 +20,7 @@ export default function History() {
   const [detail, setDetail] = useState<api.SessionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const confirm = useConfirm();
+  const [view, setView] = useState<'workouts' | 'exercises'>('workouts');
 
   useEffect(() => {
     api.fetchSessions().then((s) => setSessions(s.history)).catch((e) => setError(e.message));
@@ -49,7 +51,18 @@ export default function History() {
   return (
     <div>
       <h1 className="text-2xl font-bold">History</h1>
-      {error && <p role="alert" className="mt-3 text-sm text-[var(--danger)]">{error}</p>}
+      <div role="tablist" aria-label="Show" className="mt-4 inline-flex rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1">
+        {(['workouts', 'exercises'] as const).map((v) => (
+          <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)}
+            className={`rounded-lg px-5 py-2.5 text-sm font-medium ${view === v ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'text-[var(--muted)]'}`}>
+            {v === 'workouts' ? 'Workouts' : 'Progress'}
+          </button>
+        ))}
+      </div>
+      {view === 'exercises' && <div className="mt-5"><ProgressList /></div>}
+      {view === 'workouts' && error && <p role="alert" className="mt-3 text-sm text-[var(--danger)]">{error}</p>}
+      {view === 'workouts' && (
+        <>
       {!sessions && !error && <p className="mt-4 text-sm text-[var(--muted)]">Loading…</p>}
       {sessions?.length === 0 && <p className="mt-4 text-[var(--muted)]">Nothing yet - finish a workout and it shows up here.</p>}
       <ul className="mt-4 flex flex-col gap-2">
@@ -73,6 +86,8 @@ export default function History() {
           </li>
         ))}
       </ul>
+        </>
+      )}
     </div>
   );
 }
