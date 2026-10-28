@@ -8,14 +8,18 @@
 import { useState } from 'react';
 
 import * as api from '@/lib/api';
-import { durationText, setsText, targetText, UNIT } from '@/lib/format';
+import { durationText, setsText, UNIT } from '@/lib/format';
 import { formatWeight } from '@/lib/suggest';
 
 export default function Summary({ result }: { result: api.SessionResult }) {
   const { session, suggestions } = result;
   const [applied, setApplied] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
-  const done = session.entries.filter((e) => e.logged.some((s) => s.done));
+  const isDone = (e: (typeof session.entries)[number]) => e.logged.some((s) => s.done);
+  // Check-off exercises are one line together; only what has sets is counted and listed.
+  const checks = session.entries.filter((e) => e.kind === 'check');
+  const work = session.entries.filter((e) => e.kind !== 'check');
+  const done = work.filter(isDone);
   const sets = done.reduce((n, e) => n + e.logged.filter((s) => s.done).length, 0);
 
   const apply = async (exerciseId: string, to: number) => {
@@ -64,11 +68,17 @@ export default function Summary({ result }: { result: api.SessionResult }) {
       )}
 
       <ul className="mt-4 flex flex-col divide-y divide-[var(--border)] rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-        {session.entries.map((e) => (
+        {checks.length > 0 && (
+          <li className="flex items-baseline gap-3 px-3 py-2.5">
+            <span className="min-w-0 flex-1 truncate">{/warm/i.test(checks[0].section) ? 'Warm-ups' : 'Checked off'}</span>
+            <span className="tabular shrink-0 text-right text-sm text-[var(--muted)]">{checks.filter(isDone).length} of {checks.length} done</span>
+          </li>
+        )}
+        {work.map((e) => (
           <li key={e.id} className="flex items-baseline gap-3 px-3 py-2.5">
             <span className="min-w-0 flex-1 truncate">{e.name}</span>
             <span className="tabular shrink-0 text-right text-sm text-[var(--muted)]">
-              {e.logged.some((s) => s.done) ? setsText(e.logged) : <span className="opacity-60">skipped{targetText(e) ? ` · ${targetText(e)}` : ''}</span>}
+              {isDone(e) ? setsText(e.logged, e.kind) : <span className="opacity-60">skipped</span>}
             </span>
           </li>
         ))}

@@ -60,9 +60,11 @@ interface Props {
   entry: SessionEntry;
   onChange: (logged: LoggedSet[]) => void;
   onError: (message: string) => void;
+  /** A set was just ticked done: rest before the next one, if there is a next one here. */
+  onSetDone?: (nextSet: number | null) => void;
 }
 
-export default function SetList({ sessionId, entry, onChange, onError }: Props) {
+export default function SetList({ sessionId, entry, onChange, onError, onSetDone }: Props) {
   const [rows, setRows] = useState<Row[]>(() => initialRows(entry));
   const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
 
@@ -100,9 +102,14 @@ export default function SetList({ sessionId, entry, onChange, onError }: Props) 
 
   const toggle = (index: number) => {
     const row = { ...rows[index], done: !rows[index].done, saved: true };
-    commit(rows.map((r, i) => (i === index ? row : r)));
+    const next = rows.map((r, i) => (i === index ? row : r));
+    commit(next);
     save(index, row);
-    if (row.done && navigator.vibrate) navigator.vibrate(15);
+    if (row.done) {
+      if (navigator.vibrate) navigator.vibrate(15);
+      const left = next.findIndex((r) => !r.done);
+      onSetDone?.(left === -1 ? null : left + 1);
+    }
   };
 
   const addSet = () => {
@@ -143,8 +150,9 @@ export default function SetList({ sessionId, entry, onChange, onError }: Props) 
                 type="number"
                 inputMode="decimal"
                 step="any"
+                min={0}
                 value={row.weight}
-                onChange={(e) => edit(i, 'weight', e.target.value)}
+                onChange={(e) => edit(i, 'weight', e.target.value.replace('-', ''))}
                 aria-label={`Set ${i + 1} weight`}
                 placeholder="–"
                 className="tabular h-10 w-full min-w-0 rounded-lg border border-[var(--border)] bg-[var(--background)] text-center text-lg font-semibold outline-none focus:border-[var(--accent)]"
@@ -154,8 +162,9 @@ export default function SetList({ sessionId, entry, onChange, onError }: Props) 
             <input
               type="number"
               inputMode="numeric"
+              min={0}
               value={row.reps}
-              onChange={(e) => edit(i, 'reps', e.target.value)}
+              onChange={(e) => edit(i, 'reps', e.target.value.replace('-', ''))}
               aria-label={`Set ${i + 1} reps`}
               placeholder="–"
               className="tabular h-10 w-full min-w-0 rounded-lg border border-[var(--border)] bg-[var(--background)] text-center text-lg outline-none focus:border-[var(--accent)]"

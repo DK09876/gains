@@ -154,6 +154,45 @@ describe('uploaded files', () => {
   });
 });
 
+describe('exercise kinds', () => {
+  it('are guessed for new exercises and can be changed', async () => {
+    const db = await load();
+    db.addProfile('dk', 'DK');
+    const w = db.createWorkout('dk', 'Legs');
+    const walk = db.addExercise(w, { name: 'Walk', section: 'Warm up' });
+    const plank = db.addExercise(w, { name: 'Plank', section: 'Warm up', reps: '45-60 s', sets: 3 });
+    const squat = db.addExercise(w, { name: 'Squat', section: 'Workout', restSeconds: 120 });
+    const kinds = () => db.getWorkout(w, 'dk')!.exercises.map((e) => [e.name, e.kind, e.restSeconds]);
+    expect(kinds()).toEqual([['Walk', 'check', null], ['Plank', 'timed', null], ['Squat', 'lift', 120]]);
+    db.updateExercise(walk, { kind: 'lift' });
+    expect(db.getWorkout(w, 'dk')!.exercises[0].kind).toBe('lift');
+    void plank; void squat;
+  });
+
+  it('are given to exercises and open workouts that predate them, once', async () => {
+    const { Database } = await import('node-sqlite3-wasm');
+    const old = new Database(process.env.GAINS_DB_PATH!);
+    old.run(`CREATE TABLE exercises (id TEXT PRIMARY KEY, workoutId TEXT NOT NULL, position INTEGER NOT NULL, section TEXT NOT NULL DEFAULT '',
+      name TEXT NOT NULL, notes TEXT NOT NULL DEFAULT '', sets INTEGER, reps TEXT NOT NULL DEFAULT '', targetWeight REAL,
+      weightNote TEXT NOT NULL DEFAULT '', createdAt TEXT NOT NULL)`);
+    old.run(`CREATE TABLE session_exercises (id TEXT PRIMARY KEY, sessionId TEXT NOT NULL, exerciseId TEXT, position INTEGER NOT NULL,
+      section TEXT NOT NULL DEFAULT '', name TEXT NOT NULL, notes TEXT NOT NULL DEFAULT '', sets INTEGER, reps TEXT NOT NULL DEFAULT '',
+      targetWeight REAL, weightNote TEXT NOT NULL DEFAULT '')`);
+    old.run(`INSERT INTO exercises VALUES ('walk', 'w', 0, 'Warm up', 'Walk', '', NULL, '', NULL, '', 'x'),
+      ('plank', 'w', 1, 'Warm up', 'Plank', '', 3, '45-60 s', NULL, '', 'x'), ('squat', 'w', 2, 'Workout', 'Squat', '', 3, '8', 95, '', 'x')`);
+    old.run(`INSERT INTO session_exercises VALUES ('e1', 's', 'walk', 0, 'Warm up', 'Walk', '', NULL, '', NULL, '')`);
+    old.close();
+    const db = await load();
+    db.addProfile('dk', 'DK');
+    const raw = new (await import('node-sqlite3-wasm')).Database(process.env.GAINS_DB_PATH!);
+    expect(raw.all('SELECT id, kind FROM exercises ORDER BY position')).toEqual([
+      { id: 'walk', kind: 'check' }, { id: 'plank', kind: 'timed' }, { id: 'squat', kind: 'lift' },
+    ]);
+    expect(raw.get('SELECT kind FROM session_exercises')).toEqual({ kind: 'check' });
+    raw.close();
+  });
+});
+
 describe('sessions', () => {
   it('copy the workout, so editing the plan later does not rewrite them', async () => {
     const { db, workout, squat } = await withLegs();
@@ -221,6 +260,35 @@ describe('sessions', () => {
     expect(db.getSession(id, 'kevin')).toBeNull();
     db.deleteSession(id);
     expect(db.listSessions('dk')).toEqual([]);
+  });
+
+  it('copy each exercise\'s kind and rest when started', async () => {
+    const { db, workout, squat } = await withLegs();
+    db.updateExercise(squat, { restSeconds: 150 });
+    const id = db.startSession('dk', workout)!;
+    expect(db.getSession(id, 'dk')!.entries.map((e) => [e.name, e.kind, e.restSeconds])).toEqual([['Squat', 'lift', 150], ['Lunges', 'lift', null]]);
+  });
+
+  it('left open too long are closed: thrown away if empty, finished at their last set if not', async () => {
+    const { db, workout } = await withLegs();
+    const empty = db.startSession('dk', workout)!;
+    const raw = new (await import('node-sqlite3-wasm')).Database(process.env.GAINS_DB_PATH!);
+    raw.run(`UPDATE sessions SET startedAt = '2026-01-01T10:00:00.000Z' WHERE id = ?`, [empty]);
+    expect(db.closeStale('dk', 12 * 3600_000)).toBe(1);
+    expect(db.getSession(empty, 'dk')).toBeNull();
+
+    const used = db.startSession('dk', workout)!;
+    db.logSet(used, db.getSession(used, 'dk')!.entries[0].id, { setNumber: 1, weight: 95, reps: 8, done: true });
+    raw.run(`UPDATE sessions SET startedAt = '2026-01-01T10:00:00.000Z' WHERE id = ?`, [used]);
+    raw.run(`UPDATE set_logs SET loggedAt = '2026-01-01T10:20:00.000Z'`);
+    raw.close();
+    db.closeStale('dk', 12 * 3600_000);
+    expect(db.getSession(used, 'dk')!.finishedAt).toBe('2026-01-01T10:20:00.000Z');
+    expect(db.activeSession('dk')).toBeNull();
+    // A workout started a moment ago is left alone.
+    const fresh = db.startSession('dk', workout)!;
+    expect(db.closeStale('dk', 12 * 3600_000)).toBe(0);
+    expect(db.activeSession('dk')).toBe(fresh);
   });
 
   it('outlive their workout being deleted', async () => {

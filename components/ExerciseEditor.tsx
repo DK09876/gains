@@ -12,6 +12,7 @@ import MediaView from './MediaView';
 import * as api from '@/lib/api';
 import type { Exercise, Workout } from '@/lib/db';
 import { targetText, UNIT } from '@/lib/format';
+import { DEFAULT_REST, KIND_LABELS, KINDS } from '@/lib/kinds';
 import { MAX_UPLOAD_MB, viewOf } from '@/lib/media';
 import { formatWeight } from '@/lib/suggest';
 
@@ -26,7 +27,7 @@ interface Props {
   last: boolean;
 }
 
-type Field = 'name' | 'section' | 'sets' | 'reps' | 'targetWeight' | 'weightNote' | 'notes';
+type Field = 'name' | 'section' | 'sets' | 'reps' | 'targetWeight' | 'weightNote' | 'notes' | 'restSeconds';
 
 const asText = (e: Exercise): Record<Field, string> => ({
   name: e.name,
@@ -36,6 +37,7 @@ const asText = (e: Exercise): Record<Field, string> => ({
   targetWeight: e.targetWeight === null ? '' : formatWeight(e.targetWeight),
   weightNote: e.weightNote,
   notes: e.notes,
+  restSeconds: e.restSeconds === null ? '' : String(e.restSeconds),
 });
 
 const inputClass = 'w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 outline-none focus:border-[var(--accent)]';
@@ -82,7 +84,7 @@ export default function ExerciseEditor({ exercise, sections, open, onToggle, onC
         <button onClick={onToggle} aria-expanded={open} className="min-w-0 flex-1 px-4 py-3 text-left">
           <span className="block truncate font-semibold">{exercise.name}</span>
           <span className="block truncate text-sm text-[var(--muted)]">
-            {[targetText(exercise) || 'No target', exercise.media.length ? `${exercise.media.length} clip${exercise.media.length === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ')}
+            {[exercise.kind === 'check' ? 'Check off' : targetText(exercise) || 'No target', exercise.media.length ? `${exercise.media.length} clip${exercise.media.length === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ')}
           </span>
         </button>
         {onMove && (
@@ -101,12 +103,41 @@ export default function ExerciseEditor({ exercise, sections, open, onToggle, onC
             {field('section', 'Section (optional)', { list: `sections-${exercise.id}`, placeholder: 'e.g. Warm up', maxLength: 60 })}
             <datalist id={`sections-${exercise.id}`}>{sections.map((s) => <option key={s} value={s} />)}</datalist>
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {field('sets', 'Sets', { inputMode: 'numeric', placeholder: '3' })}
-            {field('reps', 'Reps', { placeholder: '8-12', maxLength: 30 })}
-            {field('targetWeight', `Target (${UNIT})`, { inputMode: 'decimal', placeholder: '–' })}
-            {field('weightNote', 'Weight note', { placeholder: 'each side', maxLength: 60 })}
+          <div className="mt-3">
+            <span className="text-xs text-[var(--muted)]">Logged as</span>
+            <div role="radiogroup" aria-label="Logged as" className="mt-1 grid grid-cols-3 gap-1 rounded-xl border border-[var(--border)] bg-[var(--background)] p-1">
+              {KINDS.map((k) => (
+                <button
+                  key={k}
+                  role="radio"
+                  aria-checked={exercise.kind === k}
+                  onClick={() => exercise.kind !== k && run(() => api.updateExercise(exercise.id, { kind: k }))}
+                  className={`rounded-lg py-2.5 text-sm font-semibold ${exercise.kind === k ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'text-[var(--muted)]'}`}
+                >
+                  {KIND_LABELS[k]}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              {exercise.kind === 'lift' ? 'Sets of weight × reps, with rest between.' : exercise.kind === 'timed' ? 'Sets held for a time, with a countdown.' : 'Done or not. One tap, no weights - for warm-ups and stretches.'}
+            </p>
           </div>
+          {exercise.kind === 'lift' && (
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
+              {field('sets', 'Sets', { inputMode: 'numeric', placeholder: '3' })}
+              {field('reps', 'Reps', { placeholder: '8-12', maxLength: 30 })}
+              {field('targetWeight', `Target (${UNIT})`, { inputMode: 'decimal', placeholder: '–' })}
+              {field('weightNote', 'Weight note', { placeholder: 'each side', maxLength: 60 })}
+              {field('restSeconds', 'Rest (s)', { inputMode: 'numeric', placeholder: String(DEFAULT_REST) })}
+            </div>
+          )}
+          {exercise.kind === 'timed' && (
+            <div className="mt-3 grid grid-cols-3 gap-3">
+              {field('sets', 'Sets', { inputMode: 'numeric', placeholder: '3' })}
+              {field('reps', 'Hold for', { placeholder: '45-60 s', maxLength: 30 })}
+              {field('restSeconds', 'Rest (s)', { inputMode: 'numeric', placeholder: String(DEFAULT_REST) })}
+            </div>
+          )}
           <label className="mt-3 block">
             <span className="text-xs text-[var(--muted)]">Notes</span>
             <textarea
