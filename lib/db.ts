@@ -28,6 +28,7 @@ import type { DayPlan } from './week';
 
 export { isPlace, PLACES, type Place } from './places';
 import type { SheetWorkout } from './sheet';
+import type { Tone } from './spot';
 import type { LoggedSet } from './suggest';
 
 const DB_PATH = process.env.GAINS_DB_PATH || `${process.cwd()}/data/gains.db`;
@@ -134,6 +135,42 @@ function open(): Database {
     const rows = db.all('SELECT id, section, reps FROM exercises') as Array<{ id: string; section: string; reps: string }>;
     for (const row of rows) db.run('UPDATE exercises SET kind = ? WHERE id = ?', [guessKind(row.section, row.reps), row.id]);
   }
+  // Reminders: where to send them, what each person wants, and what was sent.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      endpoint TEXT PRIMARY KEY,
+      profileId TEXT NOT NULL,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      createdAt TEXT NOT NULL
+    )
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS reminder_prefs (
+      profileId TEXT PRIMARY KEY,
+      tone TEXT NOT NULL DEFAULT 'coach',
+      dayTime TEXT NOT NULL DEFAULT '17:30',
+      day INTEGER NOT NULL DEFAULT 1,
+      friend INTEGER NOT NULL DEFAULT 1,
+      week INTEGER NOT NULL DEFAULT 1,
+      open INTEGER NOT NULL DEFAULT 1,
+      rest INTEGER NOT NULL DEFAULT 0,
+      mutedUntil TEXT,
+      ignored INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      profileId TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      key TEXT NOT NULL,
+      lineId TEXT NOT NULL DEFAULT '',
+      sentAt TEXT NOT NULL,
+      openedAt TEXT
+    )
+  `);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_notifications_profile ON notifications (profileId, sentAt)`);
   const entryColumns = db.all('PRAGMA table_info(session_exercises)') as Array<{ name: string }>;
   if (!entryColumns.some((c) => c.name === 'kind')) {
     db.run(`ALTER TABLE session_exercises ADD COLUMN kind TEXT NOT NULL DEFAULT 'lift'`);
@@ -728,4 +765,147 @@ export function currentTargets(exerciseIds: string[]): Map<string, number | null
     `SELECT id, targetWeight FROM exercises WHERE id IN (${exerciseIds.map(() => '?').join(',')})`, exerciseIds,
   ) as Array<{ id: string; targetWeight: number | null }>;
   return new Map(rows.map((r) => [r.id, r.targetWeight]));
+}
+
+// --- reminders -------------------------------------------------------------
+
+export interface ReminderPrefs {
+  tone: Tone;
+  /** "17:30": when a planned day that hasn't started gets its nudge. */
+  dayTime: string;
+  day: boolean;
+  friend: boolean;
+  week: boolean;
+  open: boolean;
+  rest: boolean;
+  /** Spot is quiet until then. */
+  mutedUntil: string | null;
+  /** Nudges in a row that were never opened; at 3, nudges stop until the app is opened. */
+  ignored: number;
+}
+
+const DEFAULT_PREFS: ReminderPrefs = { tone: 'coach', dayTime: '17:30', day: true, friend: true, week: true, open: true, rest: false, mutedUntil: null, ignored: 0 };
+const FLAGS = ['day', 'friend', 'week', 'open', 'rest'] as const;
+
+export function getPrefs(profileId: string): ReminderPrefs {
+  const row = open().get('SELECT * FROM reminder_prefs WHERE profileId = ?', [profileId]) as Record<string, unknown> | null;
+  if (!row) return { ...DEFAULT_PREFS };
+  return {
+    tone: row.tone as Tone,
+    dayTime: row.dayTime as string,
+    ...Object.fromEntries(FLAGS.map((f) => [f, row[f] === 1])) as Pick<ReminderPrefs, (typeof FLAGS)[number]>,
+    mutedUntil: (row.mutedUntil as string | null) ?? null,
+    ignored: row.ignored as number,
+  };
+}
+
+export function setPrefs(profileId: string, change: Partial<ReminderPrefs>): ReminderPrefs {
+  const next = { ...getPrefs(profileId), ...change };
+  open().run(
+    `INSERT INTO reminder_prefs (profileId, tone, dayTime, day, friend, week, open, rest, mutedUntil, ignored)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(profileId) DO UPDATE SET tone = excluded.tone, dayTime = excluded.dayTime, day = excluded.day,
+       friend = excluded.friend, week = excluded.week, open = excluded.open, rest = excluded.rest,
+       mutedUntil = excluded.mutedUntil, ignored = excluded.ignored`,
+    [profileId, next.tone, next.dayTime, ...FLAGS.map((f) => (next[f] ? 1 : 0)), next.mutedUntil, next.ignored],
+  );
+  return next;
+}
+
+export interface PushSubscriptionRow { endpoint: string; p256dh: string; auth: string }
+
+export function saveSubscription(profileId: string, sub: PushSubscriptionRow): void {
+  open().run(
+    `INSERT INTO push_subscriptions (endpoint, profileId, p256dh, auth, createdAt) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(endpoint) DO UPDATE SET profileId = excluded.profileId, p256dh = excluded.p256dh, auth = excluded.auth`,
+    [sub.endpoint, profileId, sub.p256dh, sub.auth, now()],
+  );
+}
+
+export function deleteSubscription(endpoint: string): void {
+  open().run('DELETE FROM push_subscriptions WHERE endpoint = ?', [endpoint]);
+}
+
+export function subscriptionsFor(profileId: string): PushSubscriptionRow[] {
+  return open().all('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE profileId = ?', [profileId]) as unknown as PushSubscriptionRow[];
+}
+
+/** Profiles that have at least one phone to send to. */
+export function profilesWithPush(): string[] {
+  return (open().all('SELECT DISTINCT profileId FROM push_subscriptions') as Array<{ profileId: string }>).map((r) => r.profileId);
+}
+
+export function logNotification(profileId: string, kind: string, key: string, lineId: string, at: Date = new Date()): string {
+  const id = randomUUID();
+  open().run('INSERT INTO notifications (id, profileId, kind, key, lineId, sentAt) VALUES (?, ?, ?, ?, ?, ?)', [id, profileId, kind, key, lineId, at.toISOString()]);
+  return id;
+}
+
+export function wasSent(profileId: string, kind: string, key: string): boolean {
+  return !!open().get('SELECT 1 FROM notifications WHERE profileId = ? AND kind = ? AND key = ?', [profileId, kind, key]);
+}
+
+/** How many of these kinds were sent since a moment - for "one nudge a day". */
+export function sentSince(profileId: string, kinds: string[], since: string): number {
+  const row = open().get(
+    `SELECT COUNT(*) AS n FROM notifications WHERE profileId = ? AND sentAt >= ? AND kind IN (${kinds.map(() => '?').join(',')})`,
+    [profileId, since, ...kinds],
+  ) as { n: number };
+  return row.n;
+}
+
+/** The last nudge sent, to tell whether it was opened. */
+export function lastNotification(profileId: string, kinds: string[]): { id: string; openedAt: string | null } | null {
+  return open().get(
+    `SELECT id, openedAt FROM notifications WHERE profileId = ? AND kind IN (${kinds.map(() => '?').join(',')}) ORDER BY sentAt DESC LIMIT 1`,
+    [profileId, ...kinds],
+  ) as { id: string; openedAt: string | null } | null;
+}
+
+export function recentLines(profileId: string, limit = 30): string[] {
+  return (open().all('SELECT lineId FROM notifications WHERE profileId = ? ORDER BY sentAt DESC LIMIT ?', [profileId, limit]) as Array<{ lineId: string }>).map((r) => r.lineId);
+}
+
+/** A notification was tapped: it counts as heard, and Spot's patience resets. */
+export function markOpened(id: string): void {
+  const row = open().get('SELECT profileId FROM notifications WHERE id = ?', [id]) as { profileId: string } | null;
+  if (!row) return;
+  open().run('UPDATE notifications SET openedAt = COALESCE(openedAt, ?) WHERE id = ?', [now(), id]);
+  open().run('UPDATE reminder_prefs SET ignored = 0 WHERE profileId = ?', [row.profileId]);
+}
+
+/** When this profile last started a workout, and when it last finished one with sets. */
+export function trainingDates(profileId: string): { lastStarted: string | null; lastTrained: string | null } {
+  const started = open().get('SELECT MAX(startedAt) AS at FROM sessions WHERE profileId = ?', [profileId]) as { at: string | null };
+  const trained = open().get(
+    `SELECT MAX(s.startedAt) AS at FROM sessions s WHERE s.profileId = ? AND s.finishedAt IS NOT NULL
+       AND EXISTS (SELECT 1 FROM session_exercises se JOIN set_logs l ON l.entryId = se.id WHERE se.sessionId = s.id AND l.done = 1)`,
+    [profileId],
+  ) as { at: string | null };
+  return { lastStarted: started.at, lastTrained: trained.at };
+}
+
+/** The workout in progress, and when anything last happened in it. */
+export function openWorkout(profileId: string): { id: string; workoutName: string; lastActivity: string } | null {
+  const row = open().get(
+    `SELECT s.id, s.workoutName, COALESCE((SELECT MAX(l.loggedAt) FROM set_logs l JOIN session_exercises se ON se.id = l.entryId WHERE se.sessionId = s.id), s.startedAt) AS lastActivity
+     FROM sessions s WHERE s.profileId = ? AND s.finishedAt IS NULL ORDER BY s.startedAt DESC LIMIT 1`,
+    [profileId],
+  ) as { id: string; workoutName: string; lastActivity: string } | null;
+  return row ?? null;
+}
+
+export interface Friend { id: string; name: string; lastTrained: string | null; sentToday: boolean }
+
+/** Everyone else, with when they last trained and whether you already sent Spot today. */
+export function friendsOf(profileId: string, since: string): Friend[] {
+  return listProfiles().filter((p) => p.id !== profileId).map((p) => ({
+    ...p,
+    lastTrained: trainingDates(p.id).lastTrained,
+    sentToday: wasSentSince(p.id, 'sent', profileId, since),
+  }));
+}
+
+function wasSentSince(profileId: string, kind: string, key: string, since: string): boolean {
+  return !!open().get('SELECT 1 FROM notifications WHERE profileId = ? AND kind = ? AND key = ? AND sentAt >= ?', [profileId, kind, key, since]);
 }

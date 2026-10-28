@@ -11,12 +11,15 @@ import { useCallback, useEffect, useState } from 'react';
 import PlaceTabs from '@/components/PlaceTabs';
 import SessionView from '@/components/SessionView';
 import StaleWorkout, { STALE_AFTER_MS } from '@/components/StaleWorkout';
+import SendSpot from '@/components/SendSpot';
+import SpotLine from '@/components/SpotLine';
 import StartFromPlan from '@/components/StartFromPlan';
 import Summary from '@/components/Summary';
 import WeekStrip from '@/components/WeekStrip';
 import * as api from '@/lib/api';
 import type { Session, SessionSummary, WorkoutSummary } from '@/lib/db';
 import { usePlace } from '@/lib/place';
+import type { Moment } from '@/lib/spot';
 import { DAY_NAMES, type DayPlan, weekStrip, workoutWeekNote } from '@/lib/week';
 
 export default function Today() {
@@ -75,7 +78,8 @@ export default function Today() {
     return (
       <div>
         <h1 className="mb-4 text-3xl font-extrabold">{finished.session.workoutName} done</h1>
-        <Summary result={finished} week={finishedWeek} />
+        <Summary result={finished} week={finishedWeek} cheer />
+        <SendSpot />
         <button onClick={() => { setFinished(null); load(); }} className="mt-6 w-full rounded-xl bg-[var(--accent)] py-3 font-semibold text-[var(--on-accent)]">
           Done
         </button>
@@ -116,8 +120,11 @@ export default function Today() {
   const others = workouts?.filter((w) => w.id !== planned?.id) ?? null;
   const showPlaces = !!all?.some((w) => w.place === 'home') || place === 'home';
 
+  const spot = now && strip ? spotMoment(now, plan, planned?.name, todayCell?.state === 'done', history, strip) : null;
+
   return (
     <div className="flex flex-col gap-5">
+      {spot && now && <SpotLine moment={spot.moment} vars={spot.vars} now={now} />}
       {strip && strip.planned > 0 && <WeekStrip days={strip.days} done={strip.done} planned={strip.planned} />}
 
       {planned && now ? (
@@ -177,6 +184,22 @@ export default function Today() {
       </section>
     </div>
   );
+}
+
+/** Which of Spot's lines fits today: trained already, a comeback, a planned day, or rest. */
+function spotMoment(
+  now: Date, plan: DayPlan, workout: string | undefined, trainedToday: boolean,
+  history: SessionSummary[], strip: ReturnType<typeof weekStrip>,
+): { moment: Moment; vars: Record<string, string | number> } | null {
+  const after = strip.days.slice(strip.days.findIndex((d) => d.isToday) + 1).find((d) => d.workoutId);
+  const next = after ? `${after.label} on ${DAY_NAMES[after.weekday]}` : 'next week';
+  if (trainedToday) return { moment: 'doneToday', vars: { done: strip.done, planned: strip.planned, next } };
+  const last = history.find((s) => s.setsDone > 0);
+  const days = last ? Math.floor((now.getTime() - new Date(last.startedAt).getTime()) / 86_400_000) : 0;
+  if (workout && days >= 3) return { moment: 'comeback', vars: { workout, days } };
+  if (workout) return { moment: 'day', vars: { workout } };
+  if (plan === 'rest') return { moment: 'rest', vars: { next } };
+  return null;
 }
 
 /** "2 warm-ups · 8 exercises". */

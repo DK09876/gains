@@ -72,6 +72,53 @@ included, to change as you like.
 
 **Weights are in pounds.**
 
+## Spot and reminders
+
+**Spot** is a 45 lb plate with eyebrows. He has a line on Today, cheers new
+bests on the summary, and writes the notifications. Each person picks how loud
+he is in *Spot & reminders* (from the profile menu): **Hype** only encourages,
+**Coach** gives facts and a nudge, **Drill sergeant** yells - but never about
+a planned rest day. Lines rotate and skip recently used ones.
+
+Notifications, each one switchable:
+
+| | When | |
+|---|---|---|
+| Training day | a planned day not started by your time (5:30 pm by default) | nudge |
+| Monday kick-off | Monday from 7:30: last week's tally and what's first | nudge |
+| Workout left open | 2 hours after the last set | nudge |
+| Friends finishing | someone else finishes a workout, once per friend a day | |
+| Rest's up | when rest ends, for a locked phone (off by default) | |
+| Send Spot | a friend sends him after you, once a day per pair | |
+
+At most one nudge a day. After three go unopened in a row Spot stops nudging
+until the app is next opened, and *Mute Spot for today* quiets everything.
+Times are the Pi's time zone.
+
+**How it works.** Standard web push: the phone subscribes with its browser's
+push service (Apple, Google, Mozilla), and the Pi sends to that service - it
+only calls out, so Tailscale is no obstacle. On an iPhone, Gains must be on
+the Home Screen (iOS 16.4+) and permission is asked from the *Turn on
+notifications* button. iPhones drop subscriptions quietly, so the app sends
+its subscription again every time it opens. The Pi only ever calls the
+browsers' push services. A once-a-minute check runs inside the server
+(`instrumentation.ts`).
+
+**Setup.** The server needs a key pair in `.env` (not in git):
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+```
+GAINS_VAPID_PUBLIC=...
+GAINS_VAPID_PRIVATE=...
+GAINS_VAPID_SUBJECT=https://gains.<tailnet>.ts.net
+```
+
+Without them the app works as before and the settings page says
+notifications aren't set up.
+
 ## On a phone
 
 Open it in Safari (with Tailscale connected), **Share → Add to Home Screen**,

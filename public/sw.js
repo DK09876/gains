@@ -31,3 +31,39 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(fetch(request).catch(() => caches.match(ICON)));
   }
 });
+
+/*
+ * Notifications from the Pi. Every push is shown - iPhones withdraw permission
+ * from a site that receives a push and shows nothing. Tapping one opens the
+ * app (or focuses it) and tells the Pi it was seen, so Spot knows he is
+ * being heard.
+ */
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data && event.data.text() }; }
+  const title = data.title || 'Gains';
+  event.waitUntil(self.registration.showNotification(title, {
+    body: data.body || '',
+    tag: data.tag,
+    icon: new URL('icons/icon-192.png', self.registration.scope).href,
+    badge: new URL('icons/icon-192.png', self.registration.scope).href,
+    data: { id: data.id, url: data.url || '/' },
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const { id, url } = event.notification.data || {};
+  const target = new URL(url || '/', self.registration.scope).href;
+  event.waitUntil((async () => {
+    if (id) {
+      await fetch(new URL('api/push/opened', self.registration.scope).href, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }),
+      }).catch(() => {});
+    }
+    const open = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const existing = open.find((c) => c.url.startsWith(self.registration.scope));
+    if (existing) { await existing.focus(); if ('navigate' in existing) await existing.navigate(target).catch(() => {}); }
+    else await self.clients.openWindow(target);
+  })());
+});

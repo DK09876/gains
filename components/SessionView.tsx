@@ -69,6 +69,7 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
   const [busy, setBusy] = useState(false);
   const [rest, setRest] = useState<Rest | null>(() => (typeof window === 'undefined' ? null : rememberedRest(session.id)));
   const cancelBeep = useRef<() => void>(() => {});
+  const restWatch = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [, tick] = useState(0);
   const [box] = useState(() => (typeof window === 'undefined' ? null : api.setOutbox()));
   const waiting = usePendingCount(box);
@@ -122,6 +123,16 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
     };
   }, []);
 
+  // "Rest's up" on a locked phone comes from the Pi. If the app is open when
+  // rest ends, the beep did the job and the push is called off just before.
+  const pushRestEnd = (endsAt: number, then: string) => {
+    clearTimeout(restWatch.current);
+    api.restPush(endsAt, then);
+    restWatch.current = setTimeout(() => {
+      if (document.visibilityState === 'visible') api.cancelRestPush();
+    }, Math.max(0, msUntil(endsAt) - 2000));
+  };
+
   const startRest = (entry: SessionEntry, nextSet: number | null) => {
     const seconds = entry.restSeconds ?? DEFAULT_REST;
     cancelBeep.current();
@@ -130,7 +141,9 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
     const then = nextSet ? `set ${nextSet}` : following ? pageName(following) : 'finish';
     primeAudio();
     cancelBeep.current = scheduleBeep(seconds * 1000);
-    setRest({ endsAt: nowMs() + seconds * 1000, total: seconds, then });
+    const endsAt = nowMs() + seconds * 1000;
+    setRest({ endsAt, total: seconds, then });
+    pushRestEnd(endsAt, then);
   };
   const addRest = (seconds: number) => {
     if (!rest) return;
@@ -138,8 +151,9 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
     const next = { ...rest, endsAt: rest.endsAt + seconds * 1000, total: rest.total + seconds };
     cancelBeep.current = scheduleBeep(msUntil(next.endsAt));
     setRest(next);
+    pushRestEnd(next.endsAt, next.then);
   };
-  const skipRest = useCallback(() => { cancelBeep.current(); setRest(null); }, []);
+  const skipRest = useCallback(() => { cancelBeep.current(); clearTimeout(restWatch.current); api.cancelRestPush(); setRest(null); }, []);
 
   const updateEntry = (id: string, logged: LoggedSet[]) =>
     setEntries((all) => all.map((e) => (e.id === id ? { ...e, logged } : e)));

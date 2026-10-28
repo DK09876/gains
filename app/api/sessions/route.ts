@@ -6,7 +6,7 @@
 
 import { NextResponse } from 'next/server';
 
-import { activeSession, closeStale, getSession, listSessions, startSession } from '@/lib/db';
+import { activeSession, closeStale, getPrefs, getSession, listSessions, setPrefs, startSession } from '@/lib/db';
 import { readJson, requireProfile } from '@/lib/profile-route';
 
 export const runtime = 'nodejs';
@@ -19,6 +19,8 @@ export async function GET(request: Request) {
   if (who instanceof NextResponse) return who;
   // A workout left open half a day is over: kept if anything was done, else thrown away.
   closeStale(who.profile, STALE_AFTER_MS);
+  // Opening the app is answer enough: Spot's count of ignored reminders starts again.
+  if (getPrefs(who.profile).ignored) setPrefs(who.profile, { ignored: 0 });
   const active = activeSession(who.profile);
   return NextResponse.json({
     active: active ? getSession(active, who.profile) : null,
