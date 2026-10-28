@@ -3,7 +3,7 @@
  * Every call says which profile it is for; data routes refuse one that does not.
  */
 
-import type { Exercise, ExerciseFields, Place, PlanSummary, Profile, Session, SessionSummary, Workout, WorkoutSummary } from './db';
+import type { Exercise, ExerciseFields, Friend, Place, PlanSummary, Profile, ReminderPrefs, Session, SessionSummary, Workout, WorkoutSummary } from './db';
 import { outbox } from './outbox';
 import { getProfile } from './profile';
 import type { Progress } from './progress';
@@ -129,3 +129,26 @@ export const setOutbox = () => outbox((p) => logSet(p.sessionId, p.entryId, p.se
 
 export const deleteSet = (sessionId: string, entryId: string, setNumber: number) =>
   send<{ ok: true }>(`sessions/${sessionId}/sets?entryId=${encodeURIComponent(entryId)}&setNumber=${setNumber}`, 'DELETE');
+
+// --- Spot and reminders ------------------------------------------------------
+
+export interface Reminders { prefs: ReminderPrefs; muted: boolean; canPush: boolean; publicKey: string; phones: number }
+
+export const fetchReminders = () => fetch(url('reminders')).then(json<Reminders>);
+
+export const updateReminders = (change: Partial<Omit<ReminderPrefs, 'mutedUntil' | 'ignored'>> & { mute?: 'today' | null }) =>
+  send<Reminders>('reminders', 'PATCH', change);
+
+export const subscribePush = (subscription: PushSubscriptionJSON) => send<{ ok: true }>('push/subscribe', 'POST', subscription);
+
+export const testPush = () => send<{ sent: number }>('push/test', 'POST');
+
+/** Ask the Pi to push "rest's up" at `at` (it only does if rest alerts are on). Fire and forget. */
+export const restPush = (at: number, next: string) => { void send('push/rest', 'POST', { at, next }).catch(() => {}); };
+export const cancelRestPush = () => { void send('push/rest', 'DELETE').catch(() => {}); };
+
+export const fetchFriends = () => fetch(url('friends')).then(json<{ friends: Friend[] }>).then((b) => b.friends);
+
+export const sendSpot = (to: string) =>
+  fetch(url('spot/send'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to }) })
+    .then(async (r) => (await r.json()) as { result: string; message: string });

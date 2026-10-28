@@ -8,10 +8,12 @@
 
 import { useEffect } from 'react';
 
+import { refreshSubscription } from '@/lib/notify';
+
 export default function ServiceWorker() {
   useEffect(() => {
     if (process.env.NODE_ENV !== 'production' || !('serviceWorker' in navigator)) return;
-    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(() => refreshSubscription()).catch(() => {
       /* without it the app still works; only the offline page is missing */
     });
   }, []);

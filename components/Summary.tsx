@@ -9,13 +9,18 @@
 
 import { useState } from 'react';
 
+import Spot from './Spot';
+import { useTone } from './SpotLine';
 import * as api from '@/lib/api';
 import { durationText, setsText, UNIT } from '@/lib/format';
 import type { Progress } from '@/lib/progress';
+import { pickLine } from '@/lib/spot';
 import { formatWeight } from '@/lib/suggest';
 
 interface Props {
   result: api.SessionResult;
+  /** Spot's line at the top - straight after finishing, not when reading History. */
+  cheer?: boolean;
   /** This week so far, when the summary is shown straight after finishing. */
   week?: { done: number; planned: number };
 }
@@ -38,7 +43,8 @@ const Up = () => (
   </svg>
 );
 
-export default function Summary({ result, week }: Props) {
+export default function Summary({ result, week, cheer }: Props) {
+  const tone = useTone();
   const { session, suggestions, progress } = result;
   const [applied, setApplied] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -59,8 +65,18 @@ export default function Summary({ result, week }: Props) {
     }
   };
 
+  const line = cheer && tone && !tone.muted
+    ? pickLine(bests ? 'best' : 'finish', tone.tone, { n: bests, done: week?.done ?? 0, planned: week?.planned ?? 0 }, [], session.id.charCodeAt(0))
+    : null;
+
   return (
     <div className="flex flex-col gap-5">
+      {line && (
+        <div className="flex items-center gap-3">
+          <Spot mood={bests ? 'cheer' : 'happy'} size={60} />
+          <p className="flex-1 text-[var(--muted)]">{line.text}</p>
+        </div>
+      )}
       <div className="grid grid-cols-3 gap-2">
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
           <p className={`text-2xl font-extrabold ${bests ? 'text-[var(--best)]' : ''}`}>{bests}</p>

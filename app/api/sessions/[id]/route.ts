@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 
 import { deleteSession, finishSession, getSession } from '@/lib/db';
 import { readJson } from '@/lib/profile-route';
+import { friendFinished } from '@/lib/reminders';
 import { requireSession, withSuggestions } from '@/lib/session-route';
 
 export const runtime = 'nodejs';
@@ -22,7 +23,11 @@ export async function PATCH(request: Request, { params }: Params) {
   if (found instanceof NextResponse) return found;
   const body = await readJson<{ finish?: unknown }>(request);
   if (body instanceof NextResponse) return body;
-  if (body.finish === true) finishSession(found.session.id);
+  if (body.finish === true && !found.session.finishedAt) {
+    finishSession(found.session.id);
+    // Friends who want to know hear about it; their phones are not this request's problem.
+    void friendFinished(found.profile, found.session.id).catch((e) => console.error('[friends] notify failed', e));
+  }
   return NextResponse.json(withSuggestions(getSession(found.session.id, found.profile)!, found.profile));
 }
 
