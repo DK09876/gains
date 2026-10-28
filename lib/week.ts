@@ -15,3 +15,80 @@ export const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'
 export const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 export const today = () => new Date().getDay();
+
+// --- this week, as a strip ------------------------------------------------
+
+export type DayState = 'done' | 'missed' | 'today' | 'upcoming' | 'rest' | 'free';
+
+export interface StripDay {
+  weekday: number;
+  /** "M", "T", ... */
+  letter: string;
+  /** The planned workout's name, "Rest", or "" for nothing planned. */
+  label: string;
+  workoutId: string | null;
+  state: DayState;
+  isToday: boolean;
+}
+
+const LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+/** Monday of the week containing `now`, at midnight local time. */
+export function weekStart(now: Date): Date {
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+  return start;
+}
+
+/**
+ * This week, Monday first: each day's plan and whether it happened. A day
+ * counts as done if any workout was finished on it, whatever was planned -
+ * doing Push on a Legs day still counts as training.
+ */
+export function weekStrip(
+  schedule: DayPlan[],
+  workouts: Array<{ id: string; name: string }>,
+  finished: Array<{ startedAt: string; setsDone: number }>,
+  now: Date,
+): { days: StripDay[]; done: number; planned: number } {
+  const start = weekStart(now);
+  const trained = new Set(
+    finished.filter((s) => s.setsDone > 0).map((s) => new Date(s.startedAt)).filter((d) => d >= start)
+      .map((d) => (d.getDay() + 6) % 7),
+  );
+  const todayIndex = (now.getDay() + 6) % 7;
+  const days = WEEK_ORDER.map((weekday, i): StripDay => {
+    const plan = schedule[weekday] ?? null;
+    const workout = plan && plan !== 'rest' ? workouts.find((w) => w.id === plan) : undefined;
+    const label = plan === 'rest' ? 'Rest' : workout?.name ?? '';
+    const isToday = i === todayIndex;
+    const state: DayState = trained.has(i) ? 'done'
+      : isToday ? 'today'
+      : plan === 'rest' ? 'rest'
+      : !workout ? 'free'
+      : i < todayIndex ? 'missed' : 'upcoming';
+    return { weekday, letter: LETTERS[weekday], label, workoutId: workout?.id ?? null, state, isToday };
+  });
+  return {
+    days,
+    done: days.filter((d) => d.state === 'done').length,
+    planned: days.filter((d) => d.workoutId).length,
+  };
+}
+
+/** How a workout stands this week, for the list under today's: "done Monday", "missed yesterday", "Saturday". */
+export function workoutWeekNote(workoutId: string, days: StripDay[]): string {
+  const mine = days.filter((d) => d.workoutId === workoutId);
+  const name = (d: StripDay) => {
+    const todayAt = days.findIndex((x) => x.isToday);
+    const at = days.indexOf(d);
+    return at === todayAt - 1 ? 'yesterday' : DAY_NAMES[d.weekday];
+  };
+  const done = mine.find((d) => d.state === 'done');
+  if (done) return `done ${name(done)}`;
+  const missed = mine.filter((d) => d.state === 'missed').at(-1);
+  if (missed) return `missed ${name(missed)}`;
+  const next = mine.find((d) => d.state === 'upcoming');
+  if (next) return DAY_NAMES[next.weekday];
+  return 'not planned this week';
+}

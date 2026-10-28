@@ -14,7 +14,7 @@ type Params = { params: Promise<{ id: string }> };
 export async function GET(request: Request, { params }: Params) {
   const found = requireSession(request, (await params).id);
   if (found instanceof NextResponse) return found;
-  return NextResponse.json(withSuggestions(found.session));
+  return NextResponse.json(withSuggestions(found.session, found.profile));
 }
 
 export async function PATCH(request: Request, { params }: Params) {
@@ -23,7 +23,7 @@ export async function PATCH(request: Request, { params }: Params) {
   const body = await readJson<{ finish?: unknown }>(request);
   if (body instanceof NextResponse) return body;
   if (body.finish === true) finishSession(found.session.id);
-  return NextResponse.json(withSuggestions(getSession(found.session.id, found.profile)!));
+  return NextResponse.json(withSuggestions(getSession(found.session.id, found.profile)!, found.profile));
 }
 
 export async function DELETE(request: Request, { params }: Params) {

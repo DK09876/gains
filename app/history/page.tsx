@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from 'react';
 
+import { useConfirm } from '@/components/Confirm';
 import Summary from '@/components/Summary';
 import * as api from '@/lib/api';
 import type { SessionSummary } from '@/lib/db';
@@ -17,6 +18,7 @@ export default function History() {
   const [open, setOpen] = useState<string | null>(null);
   const [detail, setDetail] = useState<api.SessionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   useEffect(() => {
     api.fetchSessions().then((s) => setSessions(s.history)).catch((e) => setError(e.message));
@@ -34,7 +36,7 @@ export default function History() {
   };
 
   const remove = async (id: string) => {
-    if (!confirm('Delete this workout from your history?')) return;
+    if (!(await confirm({ title: 'Delete this workout from your history?', body: 'Its sets go too, and it stops counting as last time.', action: 'Delete', danger: true }))) return;
     try {
       await api.deleteSession(id);
       setSessions((s) => s?.filter((x) => x.id !== id) ?? null);

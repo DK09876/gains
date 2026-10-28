@@ -6,8 +6,9 @@
  * (a GIF or a video from the camera roll) or added as a link.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
+import { useConfirm } from './Confirm';
 import MediaView from './MediaView';
 import * as api from '@/lib/api';
 import type { Exercise, Workout } from '@/lib/db';
@@ -47,11 +48,21 @@ export default function ExerciseEditor({ exercise, sections, open, onToggle, onC
   const [link, setLink] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const confirm = useConfirm();
+
+  // "Saved" shows for a moment after each change, so a field saved on leaving it doesn't leave you guessing.
+  const [saved, setSaved] = useState(0);
+  useEffect(() => {
+    if (!saved) return;
+    const t = setTimeout(() => setSaved(0), 1800);
+    return () => clearTimeout(t);
+  }, [saved]);
 
   const run = async (work: () => Promise<Workout>) => {
     setError(null);
     try {
       onChange(await work());
+      setSaved((n) => n + 1);
       return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save');
@@ -98,6 +109,7 @@ export default function ExerciseEditor({ exercise, sections, open, onToggle, onC
       {open && (
         <div className="border-t border-[var(--border)] px-4 pb-4 pt-3">
           {error && <p role="alert" className="mb-3 text-sm text-[var(--danger)]">{error}</p>}
+          <p role="status" aria-live="polite" className={`mb-1 h-4 text-right text-xs text-[var(--accent)] transition-opacity ${saved ? 'opacity-100' : 'opacity-0'}`}>{saved ? 'Saved ✓' : ''}</p>
           <div className="grid gap-3 sm:grid-cols-2">
             {field('name', 'Name', { maxLength: 120 })}
             {field('section', 'Section (optional)', { list: `sections-${exercise.id}`, placeholder: 'e.g. Warm up', maxLength: 60 })}
@@ -162,7 +174,7 @@ export default function ExerciseEditor({ exercise, sections, open, onToggle, onC
                       <div className="mt-2 flex items-center gap-2 text-xs text-[var(--muted)]">
                         <span className="min-w-0 flex-1 truncate">{m.kind === 'upload' ? `Uploaded ${view.type === 'video' ? 'video' : 'image'}` : m.url}</span>
                         <button
-                          onClick={() => confirm('Remove this clip?') && run(() => api.deleteMedia(exercise.id, m.id))}
+                          onClick={async () => { if (await confirm({ title: 'Remove this clip?', action: 'Remove', danger: true })) await run(() => api.deleteMedia(exercise.id, m.id)); }}
                           className="shrink-0 rounded px-3 py-3 text-[var(--danger)] hover:bg-[var(--surface-hover)]"
                         >
                           Remove
@@ -212,7 +224,7 @@ export default function ExerciseEditor({ exercise, sections, open, onToggle, onC
           </div>
 
           <button
-            onClick={() => confirm(`Delete ${exercise.name}? Past workouts keep what you logged.`) && run(() => api.deleteExercise(exercise.id))}
+            onClick={async () => { if (await confirm({ title: `Delete ${exercise.name}?`, body: 'Past workouts keep what you logged.', action: 'Delete exercise', danger: true })) await run(() => api.deleteExercise(exercise.id)); }}
             className="mt-3 py-3 text-sm text-[var(--danger)]"
           >
             Delete exercise
