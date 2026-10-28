@@ -24,7 +24,7 @@ export type Moment =
 
 type Lines = Record<Tone, string[]>;
 
-/** {workout}, {friend}, {sender}, {n}, {done}, {planned}, {next}, {days} are filled in. */
+/** {workout}, {friend}, {sender}, {mascot}, {n}, {done}, {planned}, {next}, {days} are filled in. */
 const LINES: Record<Moment, Lines> = {
   day: {
     hype: ['{workout} day! Let\'s go get it.', '{workout} today. You\'ve got this.', 'It\'s {workout} day. Future you says thanks.', 'Time for {workout}. Make it a good one.'],
@@ -72,9 +72,9 @@ const LINES: Record<Moment, Lines> = {
     drill: ['Done. That\'s the minimum.', 'Logged. Next time, more.', 'Finished. Rest up, then do it again.'],
   },
   sent: {
-    hype: ['{sender} sent Spot: you\'ve got this!', '{sender} sent Spot. Let\'s go!'],
-    coach: ['{sender} sent Spot: time for {workout}?', '{sender} sent Spot your way.'],
-    drill: ['{sender} sent Spot after you. {WORKOUT}. NOW.', '{sender} sent Spot. Stop scrolling, start lifting.'],
+    hype: ['{sender} sent {mascot}: you\'ve got this!', '{sender} sent {mascot}. Let\'s go!'],
+    coach: ['{sender} sent {mascot}: time for {workout}?', '{sender} sent {mascot} your way.'],
+    drill: ['{sender} sent {mascot} after you. {WORKOUT}. NOW.', '{sender} sent {mascot}. Stop scrolling, start lifting.'],
   },
   restUp: {
     hype: ['Rest\'s up! {next}.', 'Go time: {next}.'],

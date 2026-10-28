@@ -13,7 +13,7 @@
  */
 
 import {
-  activeSession, friendsOf, getPrefs, getSchedule, getSession, lastNotification, listProfiles, listSessions, listWorkouts,
+  activeSession, friendsOf, mascotName, getPrefs, getSchedule, getSession, lastNotification, listProfiles, listSessions, listWorkouts,
   openWorkout, profilesWithPush, recentLines, sentSince, setPrefs, subscriptionsFor, trainingDates, wasSent,
 } from './db';
 import { pushTo, type Message } from './push';
@@ -135,8 +135,9 @@ export async function sendSpot(from: string, to: string, now = new Date(), send?
   if (!subscriptionsFor(to).length) return 'no-phone';
   const sender = listProfiles().find((p) => p.id === from)?.name ?? 'A friend';
   const workout = plannedToday(to, now) ?? 'a workout';
-  const line = pickLine('sent', prefs.tone, { sender, workout }, recentLines(to), now.getDate());
-  const message: Message = { title: `${sender} sent Spot`, body: line.text, tag: 'sent' };
+  const mascot = mascotName(to);
+  const line = pickLine('sent', prefs.tone, { sender, workout, mascot }, recentLines(to), now.getDate());
+  const message: Message = { title: `${sender} sent ${mascot}`, body: line.text, tag: 'sent' };
   return (await pushTo(to, message, 'sent', from, line.id, send, now)) ? 'sent' : 'no-phone';
 }
 

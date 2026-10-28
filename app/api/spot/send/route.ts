@@ -10,7 +10,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const SAYS = {
-  sent: 'Spot is on his way.',
+  sent: 'On the way.',
   already: 'You already sent Spot today.',
   muted: 'They muted Spot for today.',
   'no-phone': "They haven't turned on notifications yet.",

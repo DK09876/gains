@@ -116,6 +116,34 @@ describe('workouts', () => {
   });
 });
 
+describe('mascots', () => {
+  const part = '<circle cx="60" cy="60" r="50" fill="#123456"/>';
+  const drawing = { name: 'Gronk', description: 'a kettlebell', body: part, faces: { happy: part, coach: part, stern: part, cheer: part } };
+
+  it('are Spot until one is picked, and can go back', async () => {
+    const db = await load();
+    db.addProfile('dk', 'DK');
+    expect(db.getMascot('dk')).toBeNull();
+    expect(db.mascotName('dk')).toBe('Spot');
+    db.setMascot('dk', drawing);
+    expect(db.getMascot('dk')).toEqual(drawing);
+    expect(db.mascotName('dk')).toBe('Gronk');
+    db.clearMascot('dk');
+    expect(db.mascotName('dk')).toBe('Spot');
+  });
+
+  it('can be shared for anyone to pick, and only taken back by whoever shared it', async () => {
+    const db = await load();
+    db.addProfile('dk', 'DK');
+    db.addProfile('kevin', 'Kevin');
+    const id = db.shareMascot('dk', drawing);
+    expect(db.sharedMascots()).toMatchObject([{ id, name: 'Gronk', createdBy: 'dk', createdByName: 'DK' }]);
+    expect(db.unshareMascot('kevin', id)).toBe(false);
+    expect(db.unshareMascot('dk', id)).toBe(true);
+    expect(db.sharedMascots()).toEqual([]);
+  });
+});
+
 describe('copying a whole plan', () => {
   it('copies every workout, clips and week, without the weights', async () => {
     const { db, workout, squat } = await withLegs();

@@ -1,15 +1,17 @@
 'use client';
 
 /**
- * Spot and reminders: how loud Spot is, which reminders he sends and when,
+ * Your mascot and reminders: which mascot, how loud it is, which reminders he sends and when,
  * and turning notifications on for this phone. Every change saves at once.
  */
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
+import MascotPicker from '@/components/MascotPicker';
 import Spot, { type Mood } from '@/components/Spot';
 import * as api from '@/lib/api';
+import { useMascotName } from '@/lib/mascot-client';
 import { notifyState, turnOn, type NotifyState } from '@/lib/notify';
 import { pickLine, TONE_LABELS, TONE_NOTES, TONES, type Tone } from '@/lib/spot';
 
@@ -28,6 +30,7 @@ export default function Reminders() {
   const [phone, setPhone] = useState<NotifyState>('unsupported');
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const name = useMascotName();
 
   useEffect(() => {
     api.fetchReminders()
@@ -77,7 +80,7 @@ export default function Reminders() {
     <div className="flex flex-col gap-6">
       <div>
         <Link href="/" className="-ml-1 inline-block px-1 py-3 text-sm text-[var(--muted)]">← Today</Link>
-        <h1 className="text-2xl font-bold">Spot and reminders</h1>
+        <h1 className="text-2xl font-bold">Mascot and reminders</h1>
       </div>
 
       <section className="flex items-center gap-3">
@@ -85,8 +88,10 @@ export default function Reminders() {
         <p className="flex-1 rounded-2xl rounded-tl-sm border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3">{sample}</p>
       </section>
 
+      <MascotPicker />
+
       <section className="flex flex-col gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">How loud is Spot?</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">How loud?</h2>
         <div role="radiogroup" aria-label="Spot's tone" className="grid grid-cols-3 gap-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-1">
           {TONES.map((t) => (
             <button
@@ -167,9 +172,9 @@ export default function Reminders() {
         onClick={() => save({ mute: muted ? null : 'today' })}
         className="rounded-2xl border border-[var(--border)] py-3.5"
       >
-        {muted ? 'Spot is muted until tomorrow · Unmute' : 'Mute Spot for today'}
+        {muted ? `${name} is muted until tomorrow · Unmute` : `Mute ${name} for today`}
       </button>
-      <p className="text-center text-xs text-[var(--muted)]">At most one reminder a day besides rest and friends. If three go unopened, Spot stops until you next open Gains.</p>
+      <p className="text-center text-xs text-[var(--muted)]">At most one reminder a day besides rest and friends. If three go unopened, {name} stops until you next open Gains.</p>
     </div>
   );
 }
