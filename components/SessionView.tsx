@@ -1,24 +1,31 @@
 'use client';
 
 /**
- * A workout in progress, one exercise at a time: its clip, its target, what
- * you did last time, and the sets to tick off. "All exercises" jumps
- * anywhere; nothing forces the order the plan lists them in.
+ * A workout in progress, a page at a time: a run of warm-ups as one
+ * checklist, then each lift or timed set on its own page with its clip, its
+ * target and what you did last time. "All exercises" jumps anywhere; nothing
+ * forces the order the plan lists them in.
  *
- * Every set is saved as it is ticked, so closing the page, locking the phone
- * or switching devices picks up where you were. The screen is kept awake
- * where the browser allows it, since a phone that locks between sets means
- * unlocking it with chalky hands.
+ * Ticking a set starts the rest timer. Every set is saved as it is ticked, so
+ * closing the page, locking the phone or switching devices picks up where you
+ * were. The screen is kept awake where the browser allows it, since a phone
+ * that locks between sets means unlocking it with chalky hands.
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
+import CheckList from './CheckList';
 import MediaView from './MediaView';
+import RestTimer, { type Rest } from './RestTimer';
 import SetList from './SetList';
+import TimedList from './TimedList';
 import * as api from '@/lib/api';
-import type { Session } from '@/lib/db';
+import { msUntil, nowMs, primeAudio, scheduleBeep } from '@/lib/beep';
+import type { Session, SessionEntry } from '@/lib/db';
 import { dayText, durationText, setsText, targetText } from '@/lib/format';
+import { DEFAULT_REST } from '@/lib/kinds';
 import { usePendingCount } from '@/lib/outbox';
+import { pageName, pagesOf, type Page } from '@/lib/pages';
 import type { LoggedSet } from '@/lib/suggest';
 
 interface Props {
@@ -27,25 +34,39 @@ interface Props {
   onDiscarded: () => void;
 }
 
-const doneCount = (logged: LoggedSet[]) => logged.filter((s) => s.done).length;
+const isDone = (e: SessionEntry) => e.logged.some((s) => s.done);
 
 const positionKey = (id: string) => `gains-position-${id}`;
+const restKey = (id: string) => `gains-rest-${id}`;
 
-function rememberedPosition(session: Session): number {
+function rememberedPage(session: Session, pages: Page[]): number {
   try {
-    const saved = Number(localStorage.getItem(positionKey(session.id)));
-    if (Number.isInteger(saved) && saved >= 0 && saved < session.entries.length) return saved;
-  } catch { /* storage unavailable: start from the first exercise not yet done */ }
-  const next = session.entries.findIndex((e) => !doneCount(e.logged));
+    const raw = localStorage.getItem(positionKey(session.id));
+    const saved = Number(raw);
+    if (raw !== null && Number.isInteger(saved) && saved >= 0 && saved < pages.length) return saved;
+  } catch { /* storage unavailable: start from the first page not yet done */ }
+  const next = pages.findIndex((p) => p.entries.some((e) => !isDone(e)));
   return next === -1 ? 0 : next;
+}
+
+function rememberedRest(id: string): Rest | null {
+  try {
+    const rest = JSON.parse(localStorage.getItem(restKey(id)) ?? 'null') as Rest | null;
+    return rest && rest.endsAt > Date.now() - 60_000 ? rest : null;
+  } catch {
+    return null;
+  }
 }
 
 export default function SessionView({ session, onFinished, onDiscarded }: Props) {
   const [entries, setEntries] = useState(session.entries);
-  const [index, setIndex] = useState(() => rememberedPosition(session));
+  const pages = pagesOf(entries);
+  const [index, setIndex] = useState(() => rememberedPage(session, pagesOf(session.entries)));
   const [showAll, setShowAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [rest, setRest] = useState<Rest | null>(() => (typeof window === 'undefined' ? null : rememberedRest(session.id)));
+  const cancelBeep = useRef<() => void>(() => {});
   const [, tick] = useState(0);
   const [box] = useState(() => (typeof window === 'undefined' ? null : api.setOutbox()));
   const waiting = usePendingCount(box);
@@ -57,6 +78,14 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
     try { localStorage.setItem(positionKey(session.id), String(index)); } catch { /* fine */ }
     window.scrollTo({ top: 0 });
   }, [index, session.id]);
+
+  useEffect(() => {
+    try {
+      if (rest) localStorage.setItem(restKey(session.id), JSON.stringify(rest));
+      else localStorage.removeItem(restKey(session.id));
+    } catch { /* fine */ }
+  }, [rest, session.id]);
+  useEffect(() => () => cancelBeep.current(), []);
 
   // The elapsed time in the header.
   useEffect(() => {
@@ -79,13 +108,35 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
     };
   }, []);
 
-  const entry = entries[index];
+  const startRest = (entry: SessionEntry, nextSet: number | null) => {
+    const seconds = entry.restSeconds ?? DEFAULT_REST;
+    cancelBeep.current();
+    if (!seconds) { setRest(null); return; }
+    const following = pages[index + 1];
+    const then = nextSet ? `set ${nextSet}` : following ? pageName(following) : 'finish';
+    primeAudio();
+    cancelBeep.current = scheduleBeep(seconds * 1000);
+    setRest({ endsAt: nowMs() + seconds * 1000, total: seconds, then });
+  };
+  const addRest = (seconds: number) => {
+    if (!rest) return;
+    cancelBeep.current();
+    const next = { ...rest, endsAt: rest.endsAt + seconds * 1000, total: rest.total + seconds };
+    cancelBeep.current = scheduleBeep(msUntil(next.endsAt));
+    setRest(next);
+  };
+  const skipRest = useCallback(() => { cancelBeep.current(); setRest(null); }, []);
+
+  const updateEntry = (id: string, logged: LoggedSet[]) =>
+    setEntries((all) => all.map((e) => (e.id === id ? { ...e, logged } : e)));
+
   const total = entries.length;
-  const exercisesDone = entries.filter((e) => doneCount(e.logged)).length;
+  const exercisesDone = entries.filter(isDone).length;
+  // Only what has sets counts as skipped; a warm-up left unticked is not a failure.
+  const liftsLeft = entries.filter((e) => e.kind !== 'check' && !isDone(e)).length;
 
   const finish = async () => {
-    const left = total - exercisesDone;
-    if (left && !confirm(`${left} exercise${left === 1 ? '' : 's'} not logged. Finish anyway?`)) return;
+    if (liftsLeft && !confirm(`${liftsLeft} exercise${liftsLeft === 1 ? '' : 's'} not logged. Finish anyway?`)) return;
     setBusy(true);
     // Every set has to be on the Pi before the workout is closed and its suggestions worked out.
     await box?.flush();
@@ -96,7 +147,7 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
     }
     try {
       const result = await api.finishSession(session.id);
-      try { localStorage.removeItem(positionKey(session.id)); } catch { /* fine */ }
+      try { localStorage.removeItem(positionKey(session.id)); localStorage.removeItem(restKey(session.id)); } catch { /* fine */ }
       onFinished(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not finish');
@@ -126,8 +177,12 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
     );
   }
 
+  const page = pages[Math.min(index, pages.length - 1)];
+  const entry = page.entries[0];
+  const nextPage = pages[index + 1];
+
   return (
-    <div className="pb-24">
+    <div className={rest ? 'pb-48' : 'pb-24'}>
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm text-[var(--muted)]">
@@ -158,21 +213,22 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
         <div className="mt-4">
           <ol className="flex flex-col gap-1">
             {entries.map((e, i) => {
-              const done = doneCount(e.logged);
+              const done = isDone(e);
               const showSection = e.section && e.section !== entries[i - 1]?.section;
+              const at = pages.findIndex((p) => p.entries.includes(e));
               return (
                 <li key={e.id}>
                   {showSection && <p className="mt-3 px-1 text-xs uppercase tracking-wide text-[var(--muted)]">{e.section}</p>}
                   <button
-                    onClick={() => { setIndex(i); setShowAll(false); }}
-                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left ${i === index ? 'bg-[var(--surface-hover)]' : 'bg-[var(--surface)]'}`}
+                    onClick={() => { setIndex(at); setShowAll(false); }}
+                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left ${at === index ? 'bg-[var(--surface-hover)]' : 'bg-[var(--surface)]'}`}
                   >
                     <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${done ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'border border-[var(--border)] text-[var(--muted)]'}`}>
                       {done ? '✓' : i + 1}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate">{e.name}</span>
-                      <span className="block truncate text-xs text-[var(--muted)]">{done ? setsText(e.logged) : targetText(e) || 'No target'}</span>
+                      <span className="block truncate text-xs text-[var(--muted)]">{done ? setsText(e.logged, e.kind) : e.kind === 'check' ? 'Check off' : targetText(e) || 'No target'}</span>
                     </span>
                   </button>
                 </li>
@@ -184,11 +240,15 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
             <button onClick={discard} disabled={busy} className="rounded-xl px-4 py-3 text-sm text-[var(--danger)] disabled:opacity-50">Discard</button>
           </div>
         </div>
+      ) : page.checklist ? (
+        <article className="mt-4">
+          <CheckList sessionId={session.id} entries={page.entries} onChange={updateEntry} />
+        </article>
       ) : (
         <article className="mt-4">
           {entry.section && <p className="text-xs uppercase tracking-wide text-[var(--accent)]">{entry.section}</p>}
           <h1 className="text-xl font-bold leading-tight sm:text-2xl">{entry.name}</h1>
-          <p className="mt-0.5 text-sm text-[var(--muted)]">Exercise {index + 1} of {total}</p>
+          <p className="mt-0.5 text-sm text-[var(--muted)]">{index + 1} of {pages.length}</p>
 
           {entry.media.length > 0 && <div className="mt-3"><MediaView key={entry.id} media={entry.media} /></div>}
 
@@ -199,19 +259,30 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
             </div>
             <div className="rounded-xl bg-[var(--surface)] px-3 py-2">
               <dt className="text-xs text-[var(--muted)]">Last time{entry.last ? ` · ${dayText(entry.last.date)}` : ''}</dt>
-              <dd className="tabular font-medium">{entry.last ? setsText(entry.last.sets) : 'First time'}</dd>
+              <dd className="tabular font-medium">{entry.last ? setsText(entry.last.sets, entry.kind) : 'No history yet'}</dd>
             </div>
           </dl>
           {entry.notes && <p className="mt-3 whitespace-pre-wrap text-sm text-[var(--muted)]">{entry.notes}</p>}
 
           <div className="mt-3">
-            <SetList
-              key={entry.id}
-              sessionId={session.id}
-              entry={entry}
-              onError={setError}
-              onChange={(logged) => setEntries((all) => all.map((e) => (e.id === entry.id ? { ...e, logged } : e)))}
-            />
+            {entry.kind === 'timed' ? (
+              <TimedList
+                key={entry.id}
+                sessionId={session.id}
+                entry={entry}
+                onChange={(logged) => updateEntry(entry.id, logged)}
+                onSetDone={(nextSet) => startRest(entry, nextSet)}
+              />
+            ) : (
+              <SetList
+                key={entry.id}
+                sessionId={session.id}
+                entry={entry}
+                onError={setError}
+                onChange={(logged) => updateEntry(entry.id, logged)}
+                onSetDone={(nextSet) => startRest(entry, nextSet)}
+              />
+            )}
           </div>
         </article>
       )}
@@ -223,6 +294,7 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
               No connection - {waiting} set{waiting === 1 ? ' is' : 's are'} saved on this phone and will send when you&apos;re back online.
             </p>
           )}
+          {rest && <RestTimer rest={rest} onAdd={addRest} onSkip={skipRest} />}
           <div className="safe-x mx-auto flex max-w-3xl gap-2">
             <button
               onClick={() => setIndex((i) => i - 1)}
@@ -231,9 +303,9 @@ export default function SessionView({ session, onFinished, onDiscarded }: Props)
             >
               ← Back
             </button>
-            {index < total - 1 ? (
+            {nextPage ? (
               <button onClick={() => setIndex((i) => i + 1)} className="flex-1 truncate rounded-xl bg-[var(--accent)] px-4 py-3 font-semibold text-[var(--on-accent)]">
-                Next: {entries[index + 1].name}
+                {page.checklist && !nextPage.checklist ? `Start: ${pageName(nextPage)}` : `Next: ${pageName(nextPage)}`}
               </button>
             ) : (
               <button onClick={finish} disabled={busy} className="flex-1 rounded-xl bg-[var(--accent)] px-4 py-3 font-semibold text-[var(--on-accent)] disabled:opacity-50">

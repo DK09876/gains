@@ -1,5 +1,6 @@
 /** How targets, sets and dates read on screen. */
 
+import type { Kind } from './kinds';
 import { formatWeight, type LoggedSet } from './suggest';
 
 export const UNIT = 'lb';
@@ -15,9 +16,12 @@ export function targetText(t: { sets: number | null; reps: string; targetWeight:
   return [volume, weightText(t.targetWeight, t.weightNote)].filter(Boolean).join(' · ');
 }
 
-/** "95×10, 100×8" - the sets that were done. */
-export function setsText(sets: LoggedSet[]): string {
-  return sets.filter((s) => s.done).map((s) => {
+/** "95×10, 100×8" - the sets that were done; "55 s, 48 s" when timed, "Done" when checked off. */
+export function setsText(sets: LoggedSet[], kind: Kind = 'lift'): string {
+  const done = sets.filter((s) => s.done);
+  if (kind === 'check') return done.length ? 'Done' : '';
+  if (kind === 'timed') return done.map((s) => (s.reps !== null ? `${s.reps} s` : '✓')).join(', ');
+  return done.map((s) => {
     const w = s.weight !== null ? formatWeight(s.weight) : '';
     const r = s.reps !== null ? String(s.reps) : '';
     return w && r ? `${w}×${r}` : w ? `${w} ${UNIT}` : r ? `${r} reps` : '✓';

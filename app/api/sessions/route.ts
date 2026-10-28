@@ -6,15 +6,19 @@
 
 import { NextResponse } from 'next/server';
 
-import { activeSession, getSession, listSessions, startSession } from '@/lib/db';
+import { activeSession, closeStale, getSession, listSessions, startSession } from '@/lib/db';
 import { readJson, requireProfile } from '@/lib/profile-route';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+const STALE_AFTER_MS = 12 * 60 * 60 * 1000;
+
 export async function GET(request: Request) {
   const who = requireProfile(request);
   if (who instanceof NextResponse) return who;
+  // A workout left open half a day is over: kept if anything was done, else thrown away.
+  closeStale(who.profile, STALE_AFTER_MS);
   const active = activeSession(who.profile);
   return NextResponse.json({
     active: active ? getSession(active, who.profile) : null,

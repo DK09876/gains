@@ -21,6 +21,7 @@ import { dirname, join } from 'path';
 
 import { Database } from 'node-sqlite3-wasm';
 
+import { guessKind, type Kind } from './kinds';
 import type { Media, MediaKind } from './media';
 import type { Place } from './places';
 import type { DayPlan } from './week';
@@ -123,6 +124,22 @@ function open(): Database {
   `);
   db.run(`CREATE INDEX IF NOT EXISTS idx_session_exercises_session ON session_exercises (sessionId)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_session_exercises_exercise ON session_exercises (exerciseId)`);
+  // Added after launch: how each exercise is logged (kinds.ts) and its rest
+  // between sets. Exercises that predate it get a kind from what they already
+  // say - warm-ups are checked off, "45-60 s" is timed - once, here.
+  const exerciseColumns = db.all('PRAGMA table_info(exercises)') as Array<{ name: string }>;
+  if (!exerciseColumns.some((c) => c.name === 'kind')) {
+    db.run(`ALTER TABLE exercises ADD COLUMN kind TEXT NOT NULL DEFAULT 'lift'`);
+    db.run('ALTER TABLE exercises ADD COLUMN restSeconds INTEGER');
+    const rows = db.all('SELECT id, section, reps FROM exercises') as Array<{ id: string; section: string; reps: string }>;
+    for (const row of rows) db.run('UPDATE exercises SET kind = ? WHERE id = ?', [guessKind(row.section, row.reps), row.id]);
+  }
+  const entryColumns = db.all('PRAGMA table_info(session_exercises)') as Array<{ name: string }>;
+  if (!entryColumns.some((c) => c.name === 'kind')) {
+    db.run(`ALTER TABLE session_exercises ADD COLUMN kind TEXT NOT NULL DEFAULT 'lift'`);
+    db.run('ALTER TABLE session_exercises ADD COLUMN restSeconds INTEGER');
+    db.run(`UPDATE session_exercises SET kind = COALESCE((SELECT kind FROM exercises e WHERE e.id = session_exercises.exerciseId), 'lift')`);
+  }
   db.run(`
     CREATE TABLE IF NOT EXISTS set_logs (
       entryId TEXT NOT NULL,
@@ -208,6 +225,9 @@ export interface Exercise {
   reps: string;
   targetWeight: number | null;
   weightNote: string;
+  kind: Kind;
+  /** Seconds between sets; null for the default. */
+  restSeconds: number | null;
   media: Media[];
 }
 
@@ -242,7 +262,7 @@ export function getWorkout(id: string, profileId: string): Workout | null {
   const summary = listWorkouts(profileId).find((w) => w.id === id);
   if (!summary) return null;
   const rows = open().all(
-    `SELECT id, workoutId, position, section, name, notes, sets, reps, targetWeight, weightNote
+    `SELECT id, workoutId, position, section, name, notes, sets, reps, targetWeight, weightNote, kind, restSeconds
      FROM exercises WHERE workoutId = ? ORDER BY position, createdAt`, [id],
   ) as unknown as Array<Omit<Exercise, 'media'>>;
   const media = mediaFor(rows.map((r) => r.id));
@@ -339,7 +359,7 @@ export function setDay(profileId: string, weekday: number, plan: DayPlan): boole
 
 // --- exercises -----------------------------------------------------------
 
-export type ExerciseFields = Partial<Pick<Exercise, 'section' | 'name' | 'notes' | 'sets' | 'reps' | 'targetWeight' | 'weightNote'>>;
+export type ExerciseFields = Partial<Pick<Exercise, 'section' | 'name' | 'notes' | 'sets' | 'reps' | 'targetWeight' | 'weightNote' | 'kind' | 'restSeconds'>>;
 
 export function addExercise(workoutId: string, fields: ExerciseFields): string {
   const id = randomUUID();
@@ -348,16 +368,17 @@ export function addExercise(workoutId: string, fields: ExerciseFields): string {
     'SELECT COALESCE(MAX(position), -1) + 1 AS position FROM exercises WHERE workoutId = ?', [workoutId],
   ) as { position: number };
   database.run(
-    `INSERT INTO exercises (id, workoutId, position, section, name, notes, sets, reps, targetWeight, weightNote, createdAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO exercises (id, workoutId, position, section, name, notes, sets, reps, targetWeight, weightNote, kind, restSeconds, createdAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [id, workoutId, position, fields.section ?? '', fields.name || 'New exercise', fields.notes ?? '',
-     fields.sets ?? null, fields.reps ?? '', fields.targetWeight ?? null, fields.weightNote ?? '', now()],
+     fields.sets ?? null, fields.reps ?? '', fields.targetWeight ?? null, fields.weightNote ?? '',
+     fields.kind ?? guessKind(fields.section ?? '', fields.reps ?? ''), fields.restSeconds ?? null, now()],
   );
   database.run('UPDATE workouts SET updatedAt = ? WHERE id = ?', [now(), workoutId]);
   return id;
 }
 
-const EXERCISE_FIELDS = ['section', 'name', 'notes', 'sets', 'reps', 'targetWeight', 'weightNote'] as const;
+const EXERCISE_FIELDS = ['section', 'name', 'notes', 'sets', 'reps', 'targetWeight', 'weightNote', 'kind', 'restSeconds'] as const;
 
 export function updateExercise(id: string, change: ExerciseFields): void {
   const database = open();
@@ -451,6 +472,8 @@ export interface SessionEntry {
   reps: string;
   targetWeight: number | null;
   weightNote: string;
+  kind: Kind;
+  restSeconds: number | null;
   /** The exercise's clips as they are now; none if it has been deleted from the plan. */
   media: Media[];
   logged: LoggedSet[];
@@ -493,9 +516,9 @@ export function startSession(profileId: string, workoutId: string): string | nul
       [id, profileId, workoutId, workout.name, now()]);
     for (const e of workout.exercises) {
       database.run(
-        `INSERT INTO session_exercises (id, sessionId, exerciseId, position, section, name, notes, sets, reps, targetWeight, weightNote)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [randomUUID(), id, e.id, e.position, e.section, e.name, e.notes, e.sets, e.reps, e.targetWeight, e.weightNote],
+        `INSERT INTO session_exercises (id, sessionId, exerciseId, position, section, name, notes, sets, reps, targetWeight, weightNote, kind, restSeconds)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [randomUUID(), id, e.id, e.position, e.section, e.name, e.notes, e.sets, e.reps, e.targetWeight, e.weightNote, e.kind, e.restSeconds],
       );
     }
     return id;
@@ -540,7 +563,7 @@ export function getSession(id: string, profileId: string): Session | null {
   ) as Omit<Session, 'entries'> | null;
   if (!session) return null;
   const rows = database.all(
-    `SELECT id, exerciseId, position, section, name, notes, sets, reps, targetWeight, weightNote
+    `SELECT id, exerciseId, position, section, name, notes, sets, reps, targetWeight, weightNote, kind, restSeconds
      FROM session_exercises WHERE sessionId = ? ORDER BY position`, [id],
   ) as unknown as Array<Omit<SessionEntry, 'media' | 'logged' | 'last'>>;
   const logs = database.all(
@@ -580,6 +603,26 @@ export function deleteSet(sessionId: string, entryId: string, setNumber: number)
     const later = database.all('SELECT setNumber FROM set_logs WHERE entryId = ? AND setNumber > ? ORDER BY setNumber', [entryId, setNumber]) as Array<{ setNumber: number }>;
     for (const { setNumber: n } of later) database.run('UPDATE set_logs SET setNumber = ? WHERE entryId = ? AND setNumber = ?', [n - 1, entryId, n]);
   });
+}
+
+/**
+ * Close this profile's workouts left open longer than `maxAgeMs`: one with
+ * nothing done is thrown away, one with sets is finished as of its last set.
+ * Returns how many were closed.
+ */
+export function closeStale(profileId: string, maxAgeMs: number): number {
+  const cutoff = new Date(Date.now() - maxAgeMs).toISOString();
+  const stale = open().all(
+    'SELECT id, startedAt FROM sessions WHERE profileId = ? AND finishedAt IS NULL AND startedAt < ?', [profileId, cutoff],
+  ) as Array<{ id: string; startedAt: string }>;
+  for (const { id, startedAt } of stale) {
+    const last = open().get(
+      `SELECT MAX(l.loggedAt) AS at FROM set_logs l JOIN session_exercises se ON se.id = l.entryId WHERE se.sessionId = ? AND l.done = 1`, [id],
+    ) as { at: string | null };
+    if (last.at) open().run('UPDATE sessions SET finishedAt = ? WHERE id = ?', [last.at < startedAt ? startedAt : last.at, id]);
+    else deleteSession(id);
+  }
+  return stale.length;
 }
 
 export function finishSession(id: string): void {

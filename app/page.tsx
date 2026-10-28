@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import PlaceTabs from '@/components/PlaceTabs';
 import SessionView from '@/components/SessionView';
+import StaleWorkout, { STALE_AFTER_MS } from '@/components/StaleWorkout';
 import Summary from '@/components/Summary';
 import * as api from '@/lib/api';
 import type { Session, WorkoutSummary } from '@/lib/db';
@@ -24,6 +25,8 @@ export default function Today() {
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState<string | null>(null);
   const [week, setWeek] = useState<DayPlan[]>([]);
+  // A workout in progress that was started long ago: ask about it before resuming it.
+  const [stale, setStale] = useState(false);
   const place = usePlace();
   const workouts = all?.filter((w) => w.place === place) ?? null;
 
@@ -33,6 +36,7 @@ export default function Today() {
       .then(([sessions, found, schedule]) => {
         setError(null);
         setActive(sessions.active);
+        setStale(!!sessions.active && Date.now() - Date.parse(sessions.active.startedAt) > STALE_AFTER_MS);
         setWorkouts(found);
         setWeek(schedule);
       }))
@@ -61,6 +65,17 @@ export default function Today() {
           Done
         </button>
       </div>
+    );
+  }
+
+  if (active && stale) {
+    return (
+      <StaleWorkout
+        session={active}
+        onCarryOn={() => setStale(false)}
+        onDiscarded={() => { setActive(null); setStale(false); load(); }}
+        onFinished={(result) => { setActive(null); setStale(false); setFinished(result); }}
+      />
     );
   }
 

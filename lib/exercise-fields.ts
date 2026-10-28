@@ -5,6 +5,7 @@
  */
 
 import type { ExerciseFields } from './db';
+import { isKind } from './kinds';
 
 const TEXT = { section: 60, name: 120, notes: 2000, reps: 30, weightNote: 60 } as const;
 
@@ -31,6 +32,18 @@ export function exerciseFields(body: Record<string, unknown>): ExerciseFields | 
       const weight = Number(body.targetWeight);
       if (!Number.isFinite(weight) || weight < 0 || weight > 2000) return 'Weight must be a number';
       out.targetWeight = weight;
+    }
+  }
+  if (body.kind !== undefined) {
+    if (!isKind(body.kind)) return 'kind must be lift, timed or check';
+    out.kind = body.kind;
+  }
+  if (body.restSeconds !== undefined) {
+    if (body.restSeconds === null || body.restSeconds === '') out.restSeconds = null;
+    else {
+      const rest = Number(body.restSeconds);
+      if (!Number.isInteger(rest) || rest < 0 || rest > 900) return 'Rest must be a whole number of seconds, up to 15 minutes';
+      out.restSeconds = rest;
     }
   }
   return out;
