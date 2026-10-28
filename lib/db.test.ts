@@ -116,6 +116,30 @@ describe('workouts', () => {
   });
 });
 
+describe('copying a whole plan', () => {
+  it('copies every workout, clips and week, without the weights', async () => {
+    const { db, workout, squat } = await withLegs();
+    db.addMedia(squat, { kind: 'url', url: 'https://youtu.be/abcdefgh' });
+    const push = db.createWorkout('dk', 'Push');
+    db.setDay('dk', 1, workout);
+    db.setDay('dk', 2, push);
+    db.setDay('dk', 4, 'rest');
+    db.addProfile('sam', 'Sam');
+    expect(db.plansToCopy('sam')).toEqual([{ id: 'dk', name: 'DK', workouts: 2, week: ['', 'Legs', 'Push', '', 'Rest', '', ''] }]);
+    expect(db.plansToCopy('dk')).toEqual([]);
+
+    expect(db.copyPlan('dk', 'sam')).toBe(2);
+    const mine = db.listWorkouts('sam');
+    expect(mine.map((w) => w.name)).toEqual(['Legs', 'Push']);
+    const legs = db.getWorkout(mine[0].id, 'sam')!;
+    expect(legs.exercises.map((e) => [e.name, e.targetWeight, e.sets])).toEqual([['Squat', null, 3], ['Lunges', null, null]]);
+    expect(legs.exercises[0].media[0].url).toBe('https://youtu.be/abcdefgh');
+    expect(db.getSchedule('sam')).toEqual([null, mine[0].id, mine[1].id, null, 'rest', null, null]);
+    // The original is untouched.
+    expect(db.getWorkout(workout, 'dk')!.exercises[0].targetWeight).toBe(95);
+  });
+});
+
 describe('the week', () => {
   it('plans days with this profile\'s workouts or rest, and forgets a deleted workout', async () => {
     const { db, workout } = await withLegs();

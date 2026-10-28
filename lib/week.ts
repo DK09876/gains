@@ -43,7 +43,9 @@ export function weekStart(now: Date): Date {
 /**
  * This week, Monday first: each day's plan and whether it happened. A day
  * counts as done if any workout was finished on it, whatever was planned -
- * doing Push on a Legs day still counts as training.
+ * doing Push on a Legs day still counts as training. Nothing is "missed"
+ * before your first finished workout: a friend who joins on Wednesday has not
+ * missed Monday.
  */
 export function weekStrip(
   schedule: DayPlan[],
@@ -57,6 +59,13 @@ export function weekStrip(
       .map((d) => (d.getDay() + 6) % 7),
   );
   const todayIndex = (now.getDay() + 6) % 7;
+  const first = finished.filter((s) => s.setsDone > 0).map((s) => new Date(s.startedAt)).sort((a, b) => +a - +b)[0];
+  const firstDay = first ? new Date(first.getFullYear(), first.getMonth(), first.getDate()) : null;
+  const counts = (i: number) => {
+    const day = new Date(start);
+    day.setDate(start.getDate() + i);
+    return !!firstDay && day >= firstDay;
+  };
   const days = WEEK_ORDER.map((weekday, i): StripDay => {
     const plan = schedule[weekday] ?? null;
     const workout = plan && plan !== 'rest' ? workouts.find((w) => w.id === plan) : undefined;
@@ -66,7 +75,7 @@ export function weekStrip(
       : isToday ? 'today'
       : plan === 'rest' ? 'rest'
       : !workout ? 'free'
-      : i < todayIndex ? 'missed' : 'upcoming';
+      : i < todayIndex ? (counts(i) ? 'missed' : 'free') : 'upcoming';
     return { weekday, letter: LETTERS[weekday], label, workoutId: workout?.id ?? null, state, isToday };
   });
   return {
@@ -90,5 +99,6 @@ export function workoutWeekNote(workoutId: string, days: StripDay[]): string {
   if (missed) return `missed ${name(missed)}`;
   const next = mine.find((d) => d.state === 'upcoming');
   if (next) return DAY_NAMES[next.weekday];
+  if (mine.length) return DAY_NAMES[mine[0].weekday];
   return 'not planned this week';
 }

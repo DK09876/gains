@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from 'react';
 import PlaceTabs from '@/components/PlaceTabs';
 import SessionView from '@/components/SessionView';
 import StaleWorkout, { STALE_AFTER_MS } from '@/components/StaleWorkout';
+import StartFromPlan from '@/components/StartFromPlan';
 import Summary from '@/components/Summary';
 import WeekStrip from '@/components/WeekStrip';
 import * as api from '@/lib/api';
@@ -103,6 +104,9 @@ export default function Today() {
       />
     );
   }
+
+  // A brand new profile: offer a friend's whole plan instead of an empty screen.
+  if (all && all.length === 0) return <StartFromPlan onCopied={load} />;
 
   // The day's workout from Plan's week, if one is set and still exists.
   const strip = now && all ? weekStrip(week, all, history, now) : null;
