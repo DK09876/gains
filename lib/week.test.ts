@@ -26,6 +26,14 @@ describe('weekStrip', () => {
     expect([done, planned]).toEqual([1, 5]);
   });
 
+  it('misses nothing before your first workout', () => {
+    const fresh = weekStrip(schedule, workouts, [], wed);
+    expect(fresh.days.slice(0, 2).map((d) => d.state)).toEqual(['free', 'free']);
+    expect(workoutWeekNote('push', fresh.days)).toBe('Tuesday');
+    const started = weekStrip(schedule, workouts, [{ startedAt: at(27), setsDone: 3 }], wed);
+    expect(started.days.slice(0, 3).map((d) => d.state)).toEqual(['free', 'done', 'today']);
+  });
+
   it('counts training on any day, planned or not', () => {
     const { days } = weekStrip(schedule, workouts, [{ startedAt: at(29), setsDone: 4 }], new Date(2026, 9, 30, 9));
     expect(days[3].state).toBe('done');

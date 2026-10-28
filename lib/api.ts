@@ -3,7 +3,7 @@
  * Every call says which profile it is for; data routes refuse one that does not.
  */
 
-import type { Exercise, ExerciseFields, Place, Profile, Session, SessionSummary, Workout, WorkoutSummary } from './db';
+import type { Exercise, ExerciseFields, Place, PlanSummary, Profile, Session, SessionSummary, Workout, WorkoutSummary } from './db';
 import { outbox } from './outbox';
 import { getProfile } from './profile';
 import type { Progress } from './progress';
@@ -91,6 +91,12 @@ export const deleteMedia = (exerciseId: string, mediaId: string) =>
 export const importSheet = (csv: string, preview: boolean, place: Place = 'gym') =>
   fetch(url(preview ? 'import?preview=1' : `import?place=${place}`), { method: 'POST', headers: { 'Content-Type': 'text/csv' }, body: csv })
     .then(json<ParsedSheet & { ids?: string[] }>);
+
+// --- whole plans ------------------------------------------------------------
+
+export const fetchPlans = () => fetch(url('plans')).then(json<{ plans: PlanSummary[] }>).then((b) => b.plans);
+
+export const copyPlan = (from: string) => send<{ copied: number }>('plans', 'POST', { from }).then((b) => b.copied);
 
 // --- the week --------------------------------------------------------------
 

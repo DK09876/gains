@@ -323,13 +323,61 @@ export function copyWorkout(fromId: string, toProfile: string, place?: Place): s
   const source = open().get('SELECT profileId FROM workouts WHERE id = ?', [fromId]) as { profileId: string } | null;
   const workout = source && getWorkout(fromId, source.profileId);
   if (!workout) return null;
-  return transaction(() => {
-    const id = createWorkout(toProfile, workout.name, workout.notes, place ?? workout.place);
-    for (const exercise of workout.exercises) {
-      const copy = addExercise(id, exercise);
-      for (const media of exercise.media) addMedia(copy, media);
-    }
-    return id;
+  return transaction(() => copyInto(workout, toProfile, place ?? workout.place, true));
+}
+
+/** A workout's copy in another profile; the caller holds the transaction. */
+function copyInto(workout: Workout, toProfile: string, place: Place, keepTargets: boolean): string {
+  const id = createWorkout(toProfile, workout.name, workout.notes, place);
+  for (const exercise of workout.exercises) {
+    const copy = addExercise(id, keepTargets ? exercise : { ...exercise, targetWeight: null });
+    for (const media of exercise.media) addMedia(copy, media);
+  }
+  return id;
+}
+
+export interface PlanSummary {
+  id: string;
+  name: string;
+  workouts: number;
+  /** The week, Sunday first: each day's workout name, "Rest", or "". */
+  week: string[];
+}
+
+/** Every other profile with workouts to start from, for a new profile's first screen. */
+export function plansToCopy(exceptProfile: string): PlanSummary[] {
+  return listProfiles()
+    .filter((p) => p.id !== exceptProfile)
+    .map((p) => {
+      const workouts = listWorkouts(p.id);
+      const names = new Map(workouts.map((w) => [w.id, w.name]));
+      const week = getSchedule(p.id).map((d) => (d === 'rest' ? 'Rest' : d ? names.get(d) ?? '' : ''));
+      return { id: p.id, name: p.name, workouts: workouts.length, week };
+    })
+    .filter((p) => p.workouts > 0);
+}
+
+/**
+ * Copy someone's whole plan into this profile: every workout in order, with
+ * clips, and the week pointing at the copies. Target weights are left blank -
+ * a friend lifts their own weights, and their first workout sets them.
+ */
+export function copyPlan(fromProfile: string, toProfile: string): number {
+  const workouts = listWorkouts(fromProfile).map((w) => getWorkout(w.id, fromProfile)!);
+  const week = getSchedule(fromProfile);
+  return transaction((database) => {
+    const ids = new Map(workouts.map((w) => [w.id, copyInto(w, toProfile, w.place, false)]));
+    week.forEach((plan, weekday) => {
+      if (plan === null) return;
+      const mapped = plan === 'rest' ? null : ids.get(plan) ?? null;
+      if (plan !== 'rest' && !mapped) return;
+      database.run(
+        `INSERT INTO schedule (profileId, weekday, workoutId) VALUES (?, ?, ?)
+         ON CONFLICT (profileId, weekday) DO UPDATE SET workoutId = excluded.workoutId`,
+        [toProfile, weekday, mapped],
+      );
+    });
+    return ids.size;
   });
 }
 
