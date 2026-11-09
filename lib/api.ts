@@ -174,3 +174,5 @@ export const fetchPresets = () => fetch(url('mascot/presets')).then(json<{ built
 export const sharePreset = (drawing: Drawing, description: string) => send<{ id: string }>('mascot/presets', 'POST', { ...drawing, description });
 
 export const unsharePreset = (id: string) => send<{ ok: true }>(`mascot/presets?id=${encodeURIComponent(id)}`, 'DELETE');
+
+export const setUnit = (unit: 'lb' | 'kg') => send<{ profile: Profile }>('profiles', 'PATCH', { unit }).then((b) => b.profile);

@@ -12,10 +12,10 @@ import { useState } from 'react';
 import Spot from './Spot';
 import { useTone } from './SpotLine';
 import * as api from '@/lib/api';
-import { durationText, setsText, UNIT } from '@/lib/format';
+import { durationText, setsText, unitLabel, weight } from '@/lib/format';
 import type { Progress } from '@/lib/progress';
 import { pickLine } from '@/lib/spot';
-import { formatWeight } from '@/lib/suggest';
+import { useUnit } from '@/lib/unit-store';
 
 interface Props {
   result: api.SessionResult;
@@ -26,10 +26,10 @@ interface Props {
 }
 
 function change(p: Progress): React.ReactNode {
-  const w = (n: number | null) => formatWeight(n ?? 0);
+  const w = (n: number | null) => weight(n ?? 0);
   if (p.kind === 'timed') return <>{p.before.reps} → <b className="text-[var(--foreground)]">{p.now.reps}</b> s</>;
-  if ((p.now.weight ?? 0) > (p.before.weight ?? 0)) return <>{w(p.before.weight)} → <b className="text-[var(--foreground)]">{w(p.now.weight)}</b> {UNIT}</>;
-  return <>{p.before.reps} → <b className="text-[var(--foreground)]">{p.now.reps}</b> reps at {w(p.now.weight)} {UNIT}</>;
+  if ((p.now.weight ?? 0) > (p.before.weight ?? 0)) return <>{w(p.before.weight)} → <b className="text-[var(--foreground)]">{w(p.now.weight)}</b> {unitLabel()}</>;
+  return <>{p.before.reps} → <b className="text-[var(--foreground)]">{p.now.reps}</b> reps at {w(p.now.weight)} {unitLabel()}</>;
 }
 
 const Star = () => (
@@ -44,6 +44,7 @@ const Up = () => (
 );
 
 export default function Summary({ result, week, cheer }: Props) {
+  useUnit();
   const tone = useTone();
   const { session, suggestions, progress } = result;
   const [applied, setApplied] = useState<Set<string>>(new Set());
@@ -123,14 +124,14 @@ export default function Summary({ result, week, cheer }: Props) {
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">{s.name}</p>
                   <p className="tabular text-sm text-[var(--muted)]">
-                    {s.from === null ? 'No target' : `${formatWeight(s.from)} ${UNIT}`} → <span className="text-[var(--foreground)]">{formatWeight(s.to)} {UNIT}</span>
+                    {s.from === null ? 'No target' : `${weight(s.from)} ${unitLabel()}`} → <span className="text-[var(--foreground)]">{weight(s.to)} {unitLabel()}</span>
                   </p>
                 </div>
                 {applied.has(s.exerciseId) ? (
                   <span className="text-sm text-[var(--accent)]">Updated ✓</span>
                 ) : (
                   <button onClick={() => apply(s.exerciseId, s.to)} className="shrink-0 rounded-lg bg-[var(--accent)] px-3 py-3 text-sm font-semibold text-[var(--on-accent)]">
-                    Set to {formatWeight(s.to)}
+                    Set to {weight(s.to)}
                   </button>
                 )}
               </li>

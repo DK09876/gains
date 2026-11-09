@@ -59,6 +59,8 @@ describe('parseWeight', () => {
     expect(parseWeight('10pb')).toEqual({ weight: 10, note: '' });
     expect(parseWeight('22.5 lbs')).toEqual({ weight: 22.5, note: '' });
     expect(parseWeight('10lbs? Didnt feel right')).toEqual({ weight: 10, note: 'Didnt feel right' });
+    expect(parseWeight('20 kg each')?.weight).toBeCloseTo(44.0925, 3);
+    expect(parseWeight('20kgs')?.note).toBe('');
   });
 
   it('is not fooled by notes', () => {

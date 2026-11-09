@@ -74,7 +74,10 @@ themselves. It is separation, not a login. To start from a friend's plan,
 *Plan → Copy a friend's workout* copies it into yours, targets and clips
 included, to change as you like.
 
-**Weights are in pounds.**
+**Pounds or kilograms**, per person, in *Settings*. Weights are stored in
+pounds and converted for each person - a plan copied between an lb and a kg
+friend stays right, and switching back and forth loses nothing. In kg the
+−/+ buttons step by 2.5. A sheet import that says "20 kg" is understood.
 
 ## Spot and reminders
 

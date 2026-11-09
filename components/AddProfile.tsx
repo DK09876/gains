@@ -5,7 +5,7 @@
 import { useState } from 'react';
 
 import * as api from '@/lib/api';
-import type { Profile } from '@/lib/profile';
+import type { Profile } from '@/lib/db';
 
 interface Props {
   onAdded: (profile: Profile) => void;

@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Your mascot and reminders: which mascot, how loud it is, which reminders he sends and when,
+ * Settings: pounds or kilograms, which mascot and how loud it is, which reminders he sends and when,
  * and turning notifications on for this phone. Every change saves at once.
  */
 
@@ -12,6 +12,8 @@ import MascotPicker from '@/components/MascotPicker';
 import Spot, { type Mood } from '@/components/Spot';
 import * as api from '@/lib/api';
 import { useMascotName } from '@/lib/mascot-client';
+import { rememberUnit, useUnit } from '@/lib/unit-store';
+import { UNITS, type Unit } from '@/lib/units';
 import { notifyState, turnOn, type NotifyState } from '@/lib/notify';
 import { pickLine, TONE_LABELS, TONE_NOTES, TONES, type Tone } from '@/lib/spot';
 
@@ -31,6 +33,18 @@ export default function Reminders() {
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const name = useMascotName();
+  const unit = useUnit();
+
+  const chooseUnit = async (next: Unit) => {
+    if (next === unit) return;
+    setError(null);
+    try {
+      await api.setUnit(next);
+      rememberUnit(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not change units');
+    }
+  };
 
   useEffect(() => {
     api.fetchReminders()
@@ -80,12 +94,25 @@ export default function Reminders() {
     <div className="flex flex-col gap-6">
       <div>
         <Link href="/" className="-ml-1 inline-block px-1 py-3 text-sm text-[var(--muted)]">← Today</Link>
-        <h1 className="text-2xl font-bold">Mascot and reminders</h1>
+        <h1 className="text-2xl font-bold">Settings</h1>
       </div>
 
       <section className="flex items-center gap-3">
         <Spot mood={muted ? 'coach' : MOODS[prefs.tone]} size={76} />
         <p className="flex-1 rounded-2xl rounded-tl-sm border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3">{sample}</p>
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Weights in</h2>
+        <div role="radiogroup" aria-label="Weights in" className="grid grid-cols-2 gap-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-1">
+          {UNITS.map((u) => (
+            <button key={u} role="radio" aria-checked={unit === u} onClick={() => chooseUnit(u)}
+              className={`rounded-xl py-3 font-bold ${unit === u ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'text-[var(--muted)]'}`}>
+              {u === 'lb' ? 'Pounds (lb)' : 'Kilograms (kg)'}
+            </button>
+          ))}
+        </div>
+        <p className="text-sm text-[var(--muted)]">Everything already logged converts - nothing is lost switching back and forth.</p>
       </section>
 
       <MascotPicker />

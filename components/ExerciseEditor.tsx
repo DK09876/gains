@@ -12,10 +12,11 @@ import { useConfirm } from './Confirm';
 import MediaView from './MediaView';
 import * as api from '@/lib/api';
 import type { Exercise, Workout } from '@/lib/db';
-import { targetText, UNIT } from '@/lib/format';
+import { targetText } from '@/lib/format';
 import { DEFAULT_REST, KIND_LABELS, KINDS } from '@/lib/kinds';
 import { MAX_UPLOAD_MB, viewOf } from '@/lib/media';
-import { formatWeight } from '@/lib/suggest';
+import { useUnit } from '@/lib/unit-store';
+import { fromUnit, shownWeight, type Unit } from '@/lib/units';
 
 interface Props {
   exercise: Exercise;
@@ -30,12 +31,12 @@ interface Props {
 
 type Field = 'name' | 'section' | 'sets' | 'reps' | 'targetWeight' | 'weightNote' | 'notes' | 'restSeconds';
 
-const asText = (e: Exercise): Record<Field, string> => ({
+const asText = (e: Exercise, unit: Unit): Record<Field, string> => ({
   name: e.name,
   section: e.section,
   sets: e.sets === null ? '' : String(e.sets),
   reps: e.reps,
-  targetWeight: e.targetWeight === null ? '' : formatWeight(e.targetWeight),
+  targetWeight: e.targetWeight === null ? '' : shownWeight(e.targetWeight, unit),
   weightNote: e.weightNote,
   notes: e.notes,
   restSeconds: e.restSeconds === null ? '' : String(e.restSeconds),
@@ -44,7 +45,8 @@ const asText = (e: Exercise): Record<Field, string> => ({
 const inputClass = 'w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 outline-none focus:border-[var(--accent)]';
 
 export default function ExerciseEditor({ exercise, sections, open, onToggle, onChange, onMove, first, last }: Props) {
-  const [values, setValues] = useState(() => asText(exercise));
+  const unit = useUnit();
+  const [values, setValues] = useState(() => asText(exercise, unit));
   const [link, setLink] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -71,9 +73,12 @@ export default function ExerciseEditor({ exercise, sections, open, onToggle, onC
   };
 
   const saveField = async (field: Field) => {
-    if (values[field] === asText(exercise)[field]) return;
-    const ok = await run(() => api.updateExercise(exercise.id, { [field]: values[field] }));
-    if (!ok) setValues(asText(exercise));
+    if (values[field] === asText(exercise, unit)[field]) return;
+    // A target is typed in this person's unit and kept in lb.
+    const typed = values[field];
+    const value = field === 'targetWeight' && typed.trim() !== '' && Number.isFinite(Number(typed)) ? fromUnit(Number(typed), unit) : typed;
+    const ok = await run(() => api.updateExercise(exercise.id, { [field]: value }));
+    if (!ok) setValues(asText(exercise, unit));
   };
 
   const field = (name: Field, label: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
@@ -138,7 +143,7 @@ export default function ExerciseEditor({ exercise, sections, open, onToggle, onC
             <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
               {field('sets', 'Sets', { inputMode: 'numeric', placeholder: '3' })}
               {field('reps', 'Reps', { placeholder: '8-12', maxLength: 30 })}
-              {field('targetWeight', `Target (${UNIT})`, { inputMode: 'decimal', placeholder: '–' })}
+              {field('targetWeight', `Target (${unit})`, { inputMode: 'decimal', placeholder: '–' })}
               {field('weightNote', 'Weight note', { placeholder: 'each side', maxLength: 60 })}
               {field('restSeconds', 'Rest (s)', { inputMode: 'numeric', placeholder: String(DEFAULT_REST) })}
             </div>
