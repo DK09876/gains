@@ -58,7 +58,9 @@ export function parseCsv(text: string): string[][] {
 }
 
 const URL_RE = /https?:\/\/[^\s),]+/g;
-const WEIGHT_RE = /^(\d+(?:\.\d+)?)\s*(?:lbs?|pb|pounds?)?\b[\s?.,!]*(.*)$/i;
+const WEIGHT_RE = /^(\d+(?:\.\d+)?)\s*(lbs?|pb|pounds?|kgs?|kilos?|kilograms?)?\b[\s?.,!]*(.*)$/i;
+/** Weights are stored in lb; a sheet that says kg is converted. */
+const KG_PER_LB = 0.45359237;
 
 const unwrap = (s: string) => s.trim().replace(/^\(([\s\S]*)\)$/, '$1').trim();
 const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -78,11 +80,12 @@ export function splitName(text: string): { name: string; notes: string } {
   return { name: capitalise(text.slice(0, at).trim()), notes: unwrap(rest) };
 }
 
-/** "10 lbs each" is 10 with the note "each"; "40 lb" is 40; "(Try leg press)" is not a weight. */
+/** "10 lbs each" is 10 with the note "each"; "40 lb" is 40; "20 kg" is 44.09 lb; "(Try leg press)" is not a weight. */
 export function parseWeight(cell: string): { weight: number; note: string } | null {
   const match = WEIGHT_RE.exec(cell.trim());
   if (!match) return null;
-  return { weight: Number(match[1]), note: match[2].trim() };
+  const value = Number(match[1]);
+  return { weight: /^k/i.test(match[2] ?? '') ? value / KG_PER_LB : value, note: match[3].trim() };
 }
 
 function exerciseFrom(text: string, extras: string[], section: string): SheetExercise {

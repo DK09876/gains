@@ -14,7 +14,9 @@ import { useEffect, useState } from 'react';
 
 import AddProfile from './AddProfile';
 import * as api from '@/lib/api';
-import { getProfile, setProfile, useProfile, type Profile } from '@/lib/profile';
+import { getProfile, setProfile, useProfile } from '@/lib/profile';
+import type { Profile } from '@/lib/db';
+import { rememberUnit } from '@/lib/unit-store';
 
 export default function ProfileGate({ children }: { children: React.ReactNode }) {
   const active = useProfile();
@@ -30,7 +32,10 @@ export default function ProfileGate({ children }: { children: React.ReactNode })
         // raced a profile added a moment ago against the list from before
         // it existed, and threw the new choice away.
         const remembered = getProfile();
-        if (remembered && !found.some((p) => p.id === remembered)) setProfile('');
+        const me = found.find((p) => p.id === remembered);
+        if (remembered && !me) setProfile('');
+        // The Pi has the real lb/kg setting; the device's copy catches up.
+        if (me) rememberUnit(me.unit);
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Could not reach the server'));
   }, []);
@@ -48,7 +53,7 @@ export default function ProfileGate({ children }: { children: React.ReactNode })
         {profiles?.map((profile) => (
           <button
             key={profile.id}
-            onClick={() => setProfile(profile.id)}
+            onClick={() => { setProfile(profile.id); rememberUnit(profile.unit); }}
             className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-left hover:border-[var(--accent)]"
           >
             {profile.name}

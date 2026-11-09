@@ -12,14 +12,17 @@
 import { useEffect, useRef, useState } from 'react';
 
 import type { ProgressPoint, ProgressSeries } from '@/lib/db';
-import { UNIT } from '@/lib/format';
 import { formatWeight } from '@/lib/suggest';
+import { getUnit, useUnit } from '@/lib/unit-store';
+import { toUnit } from '@/lib/units';
 
 /** What the line plots: weight for a lift, reps for a bodyweight one, seconds when timed. */
 export function metricOf(series: ProgressSeries): { value: (p: ProgressPoint) => number; unit: string; text: (p: ProgressPoint) => string } {
   if (series.kind === 'timed') return { value: (p) => p.reps ?? 0, unit: 's', text: (p) => `${p.reps ?? 0} s` };
   if (series.points.every((p) => !p.weight)) return { value: (p) => p.reps ?? 0, unit: 'reps', text: (p) => `${p.reps ?? 0} reps` };
-  return { value: (p) => p.weight ?? 0, unit: UNIT, text: (p) => `${formatWeight(p.weight ?? 0)} ${UNIT}${p.reps ? ` × ${p.reps}` : ''}` };
+  const unit = getUnit();
+  const value = (p: ProgressPoint) => Math.round(toUnit(p.weight ?? 0, unit) * 100) / 100;
+  return { value, unit, text: (p) => `${formatWeight(value(p))} ${unit}${p.reps ? ` × ${p.reps}` : ''}` };
 }
 
 /** Round tick values covering [lo, hi]: steps of 1, 2, 2.5 or 5 × a power of ten. */
@@ -41,6 +44,7 @@ const H = 200;
 const PAD = { left: 36, right: 52, top: 14, bottom: 26 };
 
 export default function ProgressChart({ series }: { series: ProgressSeries }) {
+  useUnit();
   const box = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(340);
   const [hover, setHover] = useState<number | null>(null);
@@ -109,7 +113,7 @@ export default function ProgressChart({ series }: { series: ProgressSeries }) {
             <circle key={i} cx={cx} cy={ys[i]} r={i === shown || i === last ? 5 : 4} fill="var(--accent)" stroke="var(--surface)" strokeWidth="2" />
           ))}
           <text x={xs[last] + 9} y={ys[last]} dy="0.32em" fontSize="12" fontWeight="700" fill="var(--foreground)" className="tabular">
-            {formatWeight(values[last])}{unit === UNIT ? '' : ` ${unit}`}
+            {formatWeight(values[last])}{unit === 'lb' || unit === 'kg' ? '' : ` ${unit}`}
           </text>
         </svg>
         {shown !== null && (

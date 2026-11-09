@@ -14,8 +14,10 @@ import { useEffect, useRef, useState } from 'react';
 
 import * as api from '@/lib/api';
 import type { SessionEntry } from '@/lib/db';
-import { repsGuess, UNIT } from '@/lib/format';
-import { formatWeight, type LoggedSet } from '@/lib/suggest';
+import { repsGuess } from '@/lib/format';
+import type { LoggedSet } from '@/lib/suggest';
+import { useUnit } from '@/lib/unit-store';
+import { fromUnit, shownWeight, STEP, type Unit } from '@/lib/units';
 
 interface Row {
   weight: string;
@@ -26,24 +28,25 @@ interface Row {
 }
 
 const DEFAULT_SETS = 3;
-const STEP = 5;
 
-const str = (n: number | null | undefined) => (n === null || n === undefined ? '' : formatWeight(n));
+const str = (n: number | null | undefined) => (n === null || n === undefined ? '' : String(n));
+/** A stored weight (lb) as the row shows it, in this person's unit. */
+const weightStr = (lb: number | null | undefined, unit: Unit) => (lb === null || lb === undefined ? '' : shownWeight(lb, unit));
 const num = (s: string): number | null => (s.trim() === '' || !Number.isFinite(Number(s)) ? null : Number(s));
 
-function initialRows(entry: SessionEntry): Row[] {
+function initialRows(entry: SessionEntry, unit: Unit): Row[] {
   const count = Math.max(entry.sets ?? DEFAULT_SETS, ...entry.logged.map((s) => s.setNumber));
   const rows: Row[] = [];
   for (let i = 0; i < count; i++) {
     const logged = entry.logged.find((s) => s.setNumber === i + 1);
     if (logged) {
-      rows.push({ weight: str(logged.weight), reps: str(logged.reps), done: logged.done, saved: true });
+      rows.push({ weight: weightStr(logged.weight, unit), reps: str(logged.reps), done: logged.done, saved: true });
       continue;
     }
     const above = rows[i - 1];
     const last = entry.last?.sets[i] ?? entry.last?.sets.at(-1);
     rows.push({
-      weight: above?.weight ?? str(last?.weight ?? entry.targetWeight),
+      weight: above?.weight ?? weightStr(last?.weight ?? entry.targetWeight, unit),
       reps: above?.reps ?? str(last?.reps ?? repsGuess(entry.reps)),
       done: false,
       saved: false,
@@ -52,8 +55,11 @@ function initialRows(entry: SessionEntry): Row[] {
   return rows;
 }
 
-export const toLogged = (rows: Row[]): LoggedSet[] =>
-  rows.map((r, i) => ({ setNumber: i + 1, weight: num(r.weight), reps: num(r.reps), done: r.done })).filter((_, i) => rows[i].saved);
+/** A row's weight as stored: typed in this person's unit, kept in lb. */
+const lbOf = (s: string, unit: Unit) => { const n = num(s); return n === null ? null : fromUnit(n, unit); };
+
+export const toLogged = (rows: Row[], unit: Unit): LoggedSet[] =>
+  rows.map((r, i) => ({ setNumber: i + 1, weight: lbOf(r.weight, unit), reps: num(r.reps), done: r.done })).filter((_, i) => rows[i].saved);
 
 interface Props {
   sessionId: string;
@@ -65,7 +71,8 @@ interface Props {
 }
 
 export default function SetList({ sessionId, entry, onChange, onError, onSetDone }: Props) {
-  const [rows, setRows] = useState<Row[]>(() => initialRows(entry));
+  const unit = useUnit();
+  const [rows, setRows] = useState<Row[]>(() => initialRows(entry, unit));
   const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
@@ -73,7 +80,7 @@ export default function SetList({ sessionId, entry, onChange, onError, onSetDone
   const save = (index: number, row: Row, delay = 0) => {
     clearTimeout(timers.current.get(index));
     const run = () => api.setOutbox().put(sessionId, entry.id, {
-      setNumber: index + 1, weight: num(row.weight), reps: num(row.reps), done: row.done,
+      setNumber: index + 1, weight: lbOf(row.weight, unit), reps: num(row.reps), done: row.done,
     });
     if (delay) timers.current.set(index, setTimeout(run, delay));
     else void run();
@@ -81,7 +88,7 @@ export default function SetList({ sessionId, entry, onChange, onError, onSetDone
 
   const commit = (next: Row[]) => {
     setRows(next);
-    onChange(toLogged(next));
+    onChange(toLogged(next, unit));
   };
 
   const edit = (index: number, field: 'weight' | 'reps', value: string) => {
@@ -97,7 +104,7 @@ export default function SetList({ sessionId, entry, onChange, onError, onSetDone
 
   const step = (index: number, by: number) => {
     const current = num(rows[index].weight) ?? 0;
-    edit(index, 'weight', formatWeight(Math.max(0, current + by)));
+    edit(index, 'weight', String(Math.round(Math.max(0, current + by) * 100) / 100));
   };
 
   const toggle = (index: number) => {
@@ -133,7 +140,7 @@ export default function SetList({ sessionId, entry, onChange, onError, onSetDone
     <div>
       <div className="grid grid-cols-[1.25rem_1fr_3.75rem_2.75rem] items-center gap-1.5 px-1 pb-1 text-xs uppercase tracking-wide text-[var(--muted)]">
         <span>Set</span>
-        <span className="text-center">{UNIT}</span>
+        <span className="text-center">{unit}</span>
         <span className="text-center">Reps</span>
         <span />
       </div>
@@ -145,7 +152,7 @@ export default function SetList({ sessionId, entry, onChange, onError, onSetDone
           >
             <span className="tabular text-center text-sm text-[var(--muted)]">{i + 1}</span>
             <div className="flex items-center gap-1">
-              <button onClick={() => step(i, -STEP)} aria-label={`Set ${i + 1}: ${STEP} ${UNIT} lighter`} className="h-10 w-9 shrink-0 rounded-lg bg-[var(--background)] text-lg text-[var(--muted)] active:bg-[var(--surface-hover)]">−</button>
+              <button onClick={() => step(i, -STEP[unit])} aria-label={`Set ${i + 1}: ${STEP[unit]} ${unit} lighter`} className="h-10 w-9 shrink-0 rounded-lg bg-[var(--background)] text-lg text-[var(--muted)] active:bg-[var(--surface-hover)]">−</button>
               <input
                 type="number"
                 inputMode="decimal"
@@ -157,7 +164,7 @@ export default function SetList({ sessionId, entry, onChange, onError, onSetDone
                 placeholder="–"
                 className="tabular h-10 w-full min-w-0 rounded-lg border border-[var(--border)] bg-[var(--background)] text-center text-lg font-semibold outline-none focus:border-[var(--accent)]"
               />
-              <button onClick={() => step(i, STEP)} aria-label={`Set ${i + 1}: ${STEP} ${UNIT} heavier`} className="h-10 w-9 shrink-0 rounded-lg bg-[var(--background)] text-lg text-[var(--muted)] active:bg-[var(--surface-hover)]">+</button>
+              <button onClick={() => step(i, STEP[unit])} aria-label={`Set ${i + 1}: ${STEP[unit]} ${unit} heavier`} className="h-10 w-9 shrink-0 rounded-lg bg-[var(--background)] text-lg text-[var(--muted)] active:bg-[var(--surface-hover)]">+</button>
             </div>
             <input
               type="number"

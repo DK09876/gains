@@ -14,7 +14,8 @@ import { useEffect, useRef, useState } from 'react';
 
 import AddProfile from './AddProfile';
 import * as api from '@/lib/api';
-import { setProfile, useProfile, type Profile } from '@/lib/profile';
+import type { Profile } from '@/lib/db';
+import { setProfile, useProfile } from '@/lib/profile';
 
 export default function ProfileSwitcher() {
   const active = useProfile();
@@ -82,7 +83,7 @@ export default function ProfileSwitcher() {
             </button>
           ))}
           <div className="mt-1 border-t border-[var(--border)] pt-1">
-            <Link href="/reminders" onClick={() => setOpen(false)} role="menuitem" className="block px-3 py-3 text-sm hover:bg-[var(--surface-hover)]">Mascot &amp; reminders</Link>
+            <Link href="/reminders" onClick={() => setOpen(false)} role="menuitem" className="block px-3 py-3 text-sm hover:bg-[var(--surface-hover)]">Settings</Link>
             <AddProfile compact onAdded={(p) => switchTo(p.id)} />
           </div>
         </div>

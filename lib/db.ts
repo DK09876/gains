@@ -30,6 +30,7 @@ import type { DayPlan } from './week';
 export { isPlace, PLACES, type Place } from './places';
 import type { SheetWorkout } from './sheet';
 import type { Tone } from './spot';
+import type { Unit } from './units';
 import type { LoggedSet } from './suggest';
 
 const DB_PATH = process.env.GAINS_DB_PATH || `${process.cwd()}/data/gains.db`;
@@ -44,6 +45,10 @@ function open(): Database {
   mkdirSync(dirname(DB_PATH), { recursive: true });
   db = new Database(DB_PATH);
   db.run(`CREATE TABLE IF NOT EXISTS profiles (id TEXT PRIMARY KEY, name TEXT NOT NULL, createdAt TEXT NOT NULL)`);
+  // Added after launch: lb or kg, per person. Weights are always stored in lb (units.ts).
+  if (!(db.all('PRAGMA table_info(profiles)') as Array<{ name: string }>).some((c) => c.name === 'unit')) {
+    db.run(`ALTER TABLE profiles ADD COLUMN unit TEXT NOT NULL DEFAULT 'lb'`);
+  }
   db.run(`
     CREATE TABLE IF NOT EXISTS workouts (
       id TEXT PRIMARY KEY,
@@ -241,10 +246,16 @@ function transaction<T>(work: (database: Database) => T): T {
 export interface Profile {
   id: string;
   name: string;
+  /** How this person reads and types weights; storage is always lb. */
+  unit: Unit;
 }
 
 export function listProfiles(): Profile[] {
-  return open().all('SELECT id, name FROM profiles ORDER BY createdAt') as unknown as Profile[];
+  return open().all('SELECT id, name, unit FROM profiles ORDER BY createdAt') as unknown as Profile[];
+}
+
+export function setUnit(profileId: string, unit: Unit): void {
+  open().run('UPDATE profiles SET unit = ? WHERE id = ?', [unit, profileId]);
 }
 
 /** The profile id if it exists, else null - so a typo cannot create workouts nobody can see. */
@@ -256,7 +267,7 @@ export function knownProfile(id: string | null): string | null {
 
 export function addProfile(id: string, name: string): Profile {
   open().run('INSERT INTO profiles (id, name, createdAt) VALUES (?, ?, ?)', [id, name, now()]);
-  return { id, name };
+  return { id, name, unit: 'lb' };
 }
 
 /** "Kevin" becomes `kevin`, and a second "Kevin" `kevin-2` rather than joining the first one's workouts. */

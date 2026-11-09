@@ -1,13 +1,19 @@
 /** How targets, sets and dates read on screen. */
 
 import type { Kind } from './kinds';
-import { formatWeight, type LoggedSet } from './suggest';
+import type { LoggedSet } from './suggest';
+import { getUnit } from './unit-store';
+import { shownWeight } from './units';
 
-export const UNIT = 'lb';
+/** "lb" or "kg" - whichever this person reads weights in. */
+export const unitLabel = () => getUnit();
 
-export function weightText(weight: number | null, note = ''): string {
-  if (weight === null) return note;
-  return [`${formatWeight(weight)} ${UNIT}`, note].filter(Boolean).join(' ');
+/** A stored weight (always lb) in this person's unit: "95", "43.09". */
+export const weight = (lb: number) => shownWeight(lb, getUnit());
+
+export function weightText(lb: number | null, note = ''): string {
+  if (lb === null) return note;
+  return [`${weight(lb)} ${unitLabel()}`, note].filter(Boolean).join(' ');
 }
 
 /** "3 × 10 · 95 lb each" - whichever parts are set. */
@@ -22,9 +28,9 @@ export function setsText(sets: LoggedSet[], kind: Kind = 'lift'): string {
   if (kind === 'check') return done.length ? 'Done' : '';
   if (kind === 'timed') return done.map((s) => (s.reps !== null ? `${s.reps} s` : '✓')).join(', ');
   return done.map((s) => {
-    const w = s.weight !== null ? formatWeight(s.weight) : '';
+    const w = s.weight !== null ? weight(s.weight) : '';
     const r = s.reps !== null ? String(s.reps) : '';
-    return w && r ? `${w}×${r}` : w ? `${w} ${UNIT}` : r ? `${r} reps` : '✓';
+    return w && r ? `${w}×${r}` : w ? `${w} ${unitLabel()}` : r ? `${r} reps` : '✓';
   }).join(', ');
 }
 

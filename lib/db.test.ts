@@ -47,6 +47,14 @@ describe('profiles', () => {
     expect(db.getWorkout(workout, 'dk')?.exercises.map((e) => e.name)).toEqual(['Squat', 'Lunges']);
   });
 
+  it('read weights in lb unless they choose kg', async () => {
+    const db = await load();
+    db.addProfile('dk', 'DK');
+    expect(db.listProfiles()).toEqual([{ id: 'dk', name: 'DK', unit: 'lb' }]);
+    db.setUnit('dk', 'kg');
+    expect(db.listProfiles()[0].unit).toBe('kg');
+  });
+
   it('get an id from the name, and a second one of the same name its own', async () => {
     const db = await load();
     expect(db.createProfile('Kévin').id).toBe('kevin');

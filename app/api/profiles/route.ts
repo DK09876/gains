@@ -9,7 +9,8 @@
 
 import { NextResponse } from 'next/server';
 
-import { createProfile, listProfiles } from '@/lib/db';
+import { createProfile, knownProfile, listProfiles, setUnit } from '@/lib/db';
+import { isUnit } from '@/lib/units';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -36,4 +37,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'That is enough profiles for one Pi' }, { status: 400 });
   }
   return NextResponse.json({ profile: createProfile(name) });
+}
+
+/** `?profile=` changes its own settings: `{ "unit": "kg" }`. */
+export async function PATCH(request: Request) {
+  const profile = knownProfile(new URL(request.url).searchParams.get('profile'));
+  if (!profile) return NextResponse.json({ error: 'Pick a profile first' }, { status: 400 });
+  const body = await request.json().catch(() => ({})) as { unit?: unknown };
+  if (!isUnit(body.unit)) return NextResponse.json({ error: 'unit must be lb or kg' }, { status: 400 });
+  setUnit(profile, body.unit);
+  return NextResponse.json({ profile: listProfiles().find((p) => p.id === profile) });
 }
